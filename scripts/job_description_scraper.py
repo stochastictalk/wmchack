@@ -11,6 +11,11 @@ import bs4 as bs
 import json
 from glob import glob
 import pandas as pd
+import logging
+
+logging.basicConfig(filename='../logs/info.log', level=logging.INFO,
+                    format=
+                        '%(asctime)s:%(filename)s:%(funcName)s: %(message)s')
 
 # example URL: https://www.jobs.nhs.uk/xi/vacancy/916247105
 # questions:
@@ -39,6 +44,8 @@ def write_job_description_to_json(url: str):
 def load_job_descriptions():
     ''' Reads all .json files in /data into dataframe.
 
+        The dataframe constructed can be viewed in /logs/info.log.
+
         Returns:
             pd.DataFrame: dataframe where each row corresponds to one 
                             file.
@@ -50,8 +57,12 @@ def load_job_descriptions():
         with open(fp, 'r', encoding='utf-8') as f:
             list_of_page_dct += [json.load(f)]
     
-    # cast and flatten the list of dicts to a DataFrame, return it
-    return(pd.json_normalize(list_of_page_dct))
+    # flatten the list of dicts to a DataFrame
+    df = pd.json_normalize(list_of_page_dct)
+
+    # write df to log
+    logging.info('\n' + df.to_string())
+    return(df)
 
 #url = 'https://www.jobs.nhs.uk/xi/vacancy/916243341'
 url = 'https://www.jobs.nhs.uk/xi/vacancy/916243342'
