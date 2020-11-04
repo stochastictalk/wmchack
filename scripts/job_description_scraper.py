@@ -36,3 +36,16 @@ def write_job_description_to_json(url: str):
 
 url = 'https://www.jobs.nhs.uk/xi/vacancy/916243341'
 write_job_description_to_json(url)
+
+def parse_raw_json(json: dict):
+    ''' Receives dict containing 'raw' job description information
+        (i.e. as it appears in the <script id='jobPostingSchema'> tag),
+        filters and transforms it to parse relevant information.
+
+        Args:
+            json: dictionary containing raw job information.
+        
+        Returns:
+            dict: contains filtered and transformed job information.
+    '''
+    pass
