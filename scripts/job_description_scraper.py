@@ -17,25 +17,49 @@ logging.basicConfig(filename='../logs/info.log', level=logging.INFO,
                     format=
                         '%(asctime)s:%(filename)s:%(funcName)s: %(message)s')
 
+HEADERS = {
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+        'accept-encoding': 'gzip, deflate, br',
+        'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+        'cache-control': 'max-age=0',
+        'cookie': 'general_session=F69F3B6C1E8911EB8AA577ACEE0D0942',
+        'sec-fetch-dest': 'document',
+        'sec-fetch-mode': 'navigate',
+        'sec-fetch-site': 'none',
+        'sec-fetch-user': '?1',
+        'upgrade-insecure-requests': '1',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.183 Safari/537.36'
+    }
+
 # example URL: https://www.jobs.nhs.uk/xi/vacancy/916247105
 # questions:
 #   how can we identify job description URLs?
 #   how can we extract the information from the page?
 
-def write_job_description_to_json(url: str):
+def write_job_description_to_json(page_id: str):
     ''' Parses a job description web page and writes its fields
         to a JSON file.
 
         Args:
-            url: URL to a page with the same template as
-                 https://www.jobs.nhs.uk/xi/vacancy/916243341.
+            page_id: number in URL to a page with the same template as
+                     https://www.jobs.nhs.uk/xi/vacancy/916243341.
 
         Returns:
             nothing
     '''
-    page_id = url.split('/')[-1]
-    soup = bs.BeautifulSoup(
-                requests.get(url, timeout=10).text, 'html.parser')
+    url = ' https://www.jobs.nhs.uk/xi/vacancy/' + page_id
+
+    try:
+        soup = bs.BeautifulSoup(
+                    requests.get(url, timeout=10, headers=HEADERS).text,
+                    'html.parser')
+    except requests.exceptions.ConnectTimeout:
+        print('ConnectTimeout thrown, retrying in 60 seconds...')
+        sleep(60) # wait a bit before retrying
+        soup = bs.BeautifulSoup(
+            requests.get(url, timeout=10, headers=HEADERS).text,
+            'html.parser')
+
     json_str = soup.find('script', # job description in JSON (see end of file)
                           attrs={'id':'jobPostingSchema'}).contents[0]
     page_dct = json.loads(json_str)
@@ -65,10 +89,32 @@ def load_job_descriptions():
     logging.info('\n' + df.to_string())
     return(df)
 
+def iterate_over_vacancy_pages():
+    # read in target IDs
+    with open('../data/page_urls.txt', 'r', encoding='utf-8') as f:
+        list_of_paths = f.read().split('https')[1:]
+        list_of_ids = [v.split('/')[-1] for v in list_of_paths]
+    set_of_ids = set(list_of_ids)
+
+    # remove vacancy ids that have already been captured
+    already_captured_ids = set([v[:-4] for v in glob('../data/*.json')])
+    set_of_ids = set_of_ids - already_captured_ids
+
+    for j, page_id in enumerate(set_of_ids):
+        print('Parsing vacancy {} of {}...'.format(j+1,
+                                                    len(set_of_ids)))
+        try:
+            write_job_description_to_json(page_id)
+        except AttributeError: # occurs if page isn't structured correctly
+            print('Page format incorrect, continuing...')
+            continue
+
+iterate_over_vacancy_pages()
+
 #url = 'https://www.jobs.nhs.uk/xi/vacancy/916243341'
-url = 'https://www.jobs.nhs.uk/xi/vacancy/916243342'
-write_job_description_to_json(url)
-load_job_descriptions()
+#url = 'https://www.jobs.nhs.uk/xi/vacancy/916243342'
+#write_job_description_to_json(url)
+#load_job_descriptions()
 
 
 # Example of source JSON file
