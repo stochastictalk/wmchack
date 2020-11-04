@@ -34,7 +34,8 @@ def write_job_description_to_json(url: str):
             nothing
     '''
     page_id = url.split('/')[-1]
-    soup = bs.BeautifulSoup(requests.get(url).text, 'html.parser')
+    soup = bs.BeautifulSoup(
+                requests.get(url, timeout=10).text, 'html.parser')
     json_str = soup.find('script', # job description in JSON (see end of file)
                           attrs={'id':'jobPostingSchema'}).contents[0]
     page_dct = json.loads(json_str)
