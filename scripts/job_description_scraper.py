@@ -9,6 +9,13 @@
 import requests
 import bs4 as bs
 import json
+from glob import glob
+import pandas as pd
+import logging
+
+logging.basicConfig(filename='../logs/info.log', level=logging.INFO,
+                    format=
+                        '%(asctime)s:%(filename)s:%(funcName)s: %(message)s')
 
 # example URL: https://www.jobs.nhs.uk/xi/vacancy/916247105
 # questions:
@@ -28,14 +35,39 @@ def write_job_description_to_json(url: str):
     '''
     page_id = url.split('/')[-1]
     soup = bs.BeautifulSoup(requests.get(url).text, 'html.parser')
-    json_str = soup.find('script', # job description in JSON 
+    json_str = soup.find('script', # job description in JSON (see end of file)
                           attrs={'id':'jobPostingSchema'}).contents[0]
     page_dct = json.loads(json_str)
-    with open('../data/'+page_id+'.json', 'w', encoding='utf-8') as f:
+    with open('..\\data\\'+page_id+'.json', 'w', encoding='utf-8') as f:
         json.dump(page_dct, f)
 
-url = 'https://www.jobs.nhs.uk/xi/vacancy/916243341'
+def load_job_descriptions():
+    ''' Reads all .json files in /data into dataframe.
+
+        The dataframe constructed can be viewed in /logs/info.log.
+
+        Returns:
+            pd.DataFrame: dataframe where each row corresponds to one 
+                            file.
+    '''
+    fps = glob(r'..\data\*.json')
+    fps = [fp for fp in fps if 'example' not in fp] # remove example.json
+    list_of_page_dct = []
+    for fp in fps: # read all of the files into a list of dicts
+        with open(fp, 'r', encoding='utf-8') as f:
+            list_of_page_dct += [json.load(f)]
+    
+    # flatten the list of dicts to a DataFrame
+    df = pd.json_normalize(list_of_page_dct)
+
+    # write df to log
+    logging.info('\n' + df.to_string())
+    return(df)
+
+#url = 'https://www.jobs.nhs.uk/xi/vacancy/916243341'
+url = 'https://www.jobs.nhs.uk/xi/vacancy/916243342'
 write_job_description_to_json(url)
+load_job_descriptions()
 
 
 # Example of source JSON file
