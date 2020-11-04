@@ -11,6 +11,7 @@ import bs4 as bs
 import json
 from glob import glob
 import pandas as pd
+from time import sleep
 import logging
 
 logging.basicConfig(filename='../logs/info.log', level=logging.INFO,
@@ -97,7 +98,8 @@ def iterate_over_vacancy_pages():
     set_of_ids = set(list_of_ids)
 
     # remove vacancy ids that have already been captured
-    already_captured_ids = set([v[:-4] for v in glob('../data/*.json')])
+    already_captured_ids = set([v.split('\\')[-1][:-5] 
+                                    for v in glob('..\\data\\*.json')])
     set_of_ids = set_of_ids - already_captured_ids
 
     for j, page_id in enumerate(set_of_ids):
