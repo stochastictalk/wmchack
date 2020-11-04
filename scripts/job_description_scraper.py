@@ -8,6 +8,7 @@
 
 import requests
 import bs4 as bs
+import json
 
 # example URL: https://www.jobs.nhs.uk/xi/vacancy/916247105
 # questions:
@@ -25,11 +26,13 @@ def write_job_description_to_json(url: str):
         Returns:
             nothing
     '''
+    page_id = url.split('/')[-1]
     soup = bs.BeautifulSoup(requests.get(url).text, 'html.parser')
-    script_tag = soup.find('script', # job description in JSON 
-                            attrs={'id':'jobPostingSchema'})
-    return(script_tag.contents)
+    json_str = soup.find('script', # job description in JSON 
+                          attrs={'id':'jobPostingSchema'}).contents[0]
+    page_dct = json.loads(json_str)
+    with open('../data/'+page_id+'.json', 'w', encoding='utf-8') as f:
+        json.dump(page_dct, f)
 
 url = 'https://www.jobs.nhs.uk/xi/vacancy/916243341'
-script_tag = write_job_description_to_json(url)
-print(script_tag)
+write_job_description_to_json(url)
