@@ -9,3 +9,7 @@ Initialize conda env from root project directory:
 ```
 conda env create --file requirements.txt
 ```
+
+---
+
+![Screenshot of web app](/data/img/readme.png)
