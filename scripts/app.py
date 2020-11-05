@@ -99,7 +99,7 @@ _NHS Wales Data Hackathon, 4th and 5th November 2020 with the WMC, WHAN and SeRP
 # **Classifying job roles: An NLP challenge using NHS Job descriptions**
 
 This app summarizes the project and explores the properties of vacancy\
-s descriptions from the [NHS Jobs website](https://www.jobs.nhs.uk/).
+ descriptions from the [NHS Jobs website](https://www.jobs.nhs.uk/).
 
 The scripts and requirements for this application are available through \
 [this Github repository](https://github.com/stochastictalk/wmchack).
@@ -194,7 +194,11 @@ dhtml.A('3. Analysis & Visualization', href='#sec3',
 dhtml.Br(),
 
 
-dhtml.Img(src='../data/img/002.png')
+dhtml.Img(src='https://github.com/stochastictalk/wmchack/blob/main/data/img/001.png?raw=true',
+          width=600),
+
+dhtml.Img(src='https://github.com/stochastictalk/wmchack/blob/main/data/img/002.png?raw=true',
+          width=600)
 
 ]
 
