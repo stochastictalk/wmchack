@@ -10,6 +10,7 @@
 #   fnc write_vacancy_to_json
 #   fnc write_vacancies_to_json
 #   fnc write_vacancy_urls_to_file
+# TODO: update JSON writer, include Feather writer
 
 import requests
 import bs4 as bs
@@ -22,7 +23,7 @@ import os
 import re
 from math import ceil
 
-LOG_PATH = '../logs/scraper.log'
+LOG_PATH = '..\\logs\\scraper.log'
 logging.basicConfig(filename=LOG_PATH, level=logging.INFO,
                     format=
                         '%(asctime)s:%(filename)s:%(funcName)s: %(message)s')
@@ -44,7 +45,10 @@ HEADERS = {
 TIME_BETWEEN_UNSUCCESSFUL_REQUESTS = 60 # seconds
 TIMEOUT = 10 # requests.get timeout, seconds
 JOBS_PER_PAGE = 20.
-TMP_FILEPATH = './tmp/scraper.tmp' # in case the script is interrupted
+TMP_FILEPATH = '.\\tmp\\scraper.tmp' # in case the script is interrupted
+URLS_FP = '..\\data\\vacancy_page_urls.txt'
+JSON_FP = '..\\data\\json\\'
+IGNORED_IDS_FP = '..\\data\\ignored_page_ids.txt'
 
 def graceful_request_to_soup(url):
     ''' requests.get that handles errors, retries.
@@ -67,7 +71,6 @@ def write_vacancy_urls_to_file():
     print('URL scraper intialised. Refer to {} for status updates.'.format
                                                                     (LOG_PATH))
     search_url_prefix = "https://www.jobs.nhs.uk/xi/search_vacancy?action=page&page="
-    urls_fp = '../data/vacancy_page_urls.txt'
 
     try: # if scraper.tmp exists, contains 'n_pages,last_page_scraped'
         logging.info('Resuming scrape.')
@@ -100,7 +103,7 @@ def write_vacancy_urls_to_file():
             rel_path = v.find('h2').find('a')['href']
 
             # write vacancy page URL to file
-            with open(urls_fp, 'a', encoding='utf-8') as f:
+            with open(URLS_FP, 'a', encoding='utf-8') as f:
                 f.write("https://www.jobs.nhs.uk" + rel_path + '\n')
 
         if page_n < n_pages: # update number of last page scraped in scraper.tmp
@@ -111,46 +114,54 @@ def write_vacancy_urls_to_file():
             logging.info('All vacancy page URLs scraped successfully.')
 
 def write_vacancies_to_json():
-    # read in target IDs
-    with open('../data/page_urls.txt', 'r', encoding='utf-8') as f:
-        list_of_paths = f.read().split('https')[1:]
-        list_of_ids = [v.split('/')[-1] for v in list_of_paths]
-    set_of_ids = set(list_of_ids)
+    logging.info('Scraping vacancy pages based on URLs in {}.'.format(URLS_FP))
+    # get vacancy ids that have already been captured
+    captured_ids = set([v.split('\\')[-1][:-5] 
+                                    for v in glob(JSON_FP + '*.json')])
+    try:
+        with open(IGNORED_IDS_FP, 'r', encoding='utf-8') as f:
+            ignored_ids = set(f.read().split('\n'))
+    except FileNotFoundError:
+        ignored_ids = set()
 
-    # remove vacancy ids that have already been captured
-    already_captured_ids = set([v.split('\\')[-1][:-5] 
-                                    for v in glob('..\\data\\*.json')])
-    set_of_ids = set_of_ids - already_captured_ids
+    ids_to_skip = captured_ids.union(ignored_ids)
 
-    for j, page_id in enumerate(set_of_ids):
-        print('Parsing vacancy {} of {}...'.format(j+1,
-                                                    len(set_of_ids)))
-        try:
-            write_job_description_to_json(page_id)
-        except AttributeError: # occurs if page isn't structured correctly
-            print('Page format incorrect, continuing...')
-            continue
+    urls_file = open(URLS_FP, 'r', encoding='utf-8')
+    list_of_urls = urls_file.read().splitlines()
+    n_urls = len(list_of_urls)
+    for j, page_url in enumerate(list_of_urls):
+        logging.info('Scraping vacancy description page {} of {}.'.format(j+1,
+                                                                     n_urls))
+        page_id = page_url.split('/')[-1] # is a string
+        if page_id not in ids_to_skip: 
+            try:
+                write_vacancy_to_json(page_id) # download
+            except AttributeError: # occurs if page isn't structured correctly
+                # add id to ignored ids
+                with open(IGNORED_IDS_FP, 'a', encoding='utf-8') as f:
+                    f.write(page_id)
+                logging.info('Page format incorrect, appending page id to {} and skipping.'.format(IGNORED_IDS_FP))
+                continue
+        else:
+            logging.info('Skipping vacancy page {}.'.format(page_id))
+    
+    urls_file.close()
 
 def write_vacancy_to_json(page_id: str):
     ''' Parses a job description web page and writes its fields
         to a JSON file.
-
-        Args:
-            page_id: number in URL to a page with the same template as
-                     https://www.jobs.nhs.uk/xi/vacancy/916243341.
-
-        Returns:
-            nothing
     '''
     url = ' https://www.jobs.nhs.uk/xi/vacancy/' + page_id
+    logging.info('Scraping vacancy description at {}.'.format(url))
     soup = graceful_request_to_soup(url)
     json_str = soup.find('script', # job description in JSON (see end of file)
                           attrs={'id':'jobPostingSchema'}).contents[0]
     page_dct = json.loads(json_str)
-    with open('..\\data\\'+page_id+'.json', 'w', encoding='utf-8') as f:
+    with open(JSON_FP + page_id + '.json', 'w', encoding='utf-8') as f:
         json.dump(page_dct, f)
 
-write_vacancy_urls_to_file()
+#write_vacancy_urls_to_file()
+write_vacancies_to_json()
 
 
 # Example of source JSON file
