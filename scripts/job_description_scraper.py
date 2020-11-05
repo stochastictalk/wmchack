@@ -54,8 +54,9 @@ def write_job_description_to_json(page_id: str):
         soup = bs.BeautifulSoup(
                     requests.get(url, timeout=10, headers=HEADERS).text,
                     'html.parser')
-    except requests.exceptions.ConnectTimeout:
-        print('ConnectTimeout thrown, retrying in 60 seconds...')
+    except (requests.exceptions.ConnectTimeout, 
+                requests.exceptions.ReadTimeout):
+        print('ReadTimeout or ConnectTimeout thrown, retrying in 60 seconds...')
         sleep(60) # wait a bit before retrying
         soup = bs.BeautifulSoup(
             requests.get(url, timeout=10, headers=HEADERS).text,
@@ -66,29 +67,6 @@ def write_job_description_to_json(page_id: str):
     page_dct = json.loads(json_str)
     with open('..\\data\\'+page_id+'.json', 'w', encoding='utf-8') as f:
         json.dump(page_dct, f)
-
-def load_job_descriptions():
-    ''' Reads all .json files in /data into dataframe.
-
-        The dataframe constructed can be viewed in /logs/info.log.
-
-        Returns:
-            pd.DataFrame: dataframe where each row corresponds to one 
-                            file.
-    '''
-    fps = glob(r'..\data\*.json')
-    fps = [fp for fp in fps if 'example' not in fp] # remove example.json
-    list_of_page_dct = []
-    for fp in fps: # read all of the files into a list of dicts
-        with open(fp, 'r', encoding='utf-8') as f:
-            list_of_page_dct += [json.load(f)]
-    
-    # flatten the list of dicts to a DataFrame
-    df = pd.json_normalize(list_of_page_dct)
-
-    # write df to log
-    logging.info('\n' + df.to_string())
-    return(df)
 
 def iterate_over_vacancy_pages():
     # read in target IDs
