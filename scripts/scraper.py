@@ -1,10 +1,15 @@
 # -*- utf-8 -*-
 
 # Created: 4th November 2020
-# Author: Jerome Wynne (jeromewynne@das-ltd.co.uk)
+# Authors: Jerome Wynne (jeromewynne@das-ltd.co.uk)
+#          Mark Drakeford
 # Environment: wmchack
 # Summary: Scrapes job descriptions from the NHS Jobs
 #          website and writes them to a JSON list.
+# Contents:
+#   fnc write_vacancy_to_json
+#   fnc write_vacancies_to_json
+#   fnc write_vacancy_urls_to_file
 
 import requests
 import bs4 as bs
@@ -13,11 +18,16 @@ from glob import glob
 import pandas as pd
 from time import sleep
 import logging
+import os
+import re
+from math import ceil
 
-logging.basicConfig(filename='../logs/info.log', level=logging.INFO,
+LOG_PATH = '../logs/scraper.log'
+logging.basicConfig(filename=LOG_PATH, level=logging.INFO,
                     format=
                         '%(asctime)s:%(filename)s:%(funcName)s: %(message)s')
 
+# header spoofing is necessary otherwise NHS Job does not return page
 HEADERS = {
         'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
         'accept-encoding': 'gzip, deflate, br',
@@ -31,44 +41,76 @@ HEADERS = {
         'upgrade-insecure-requests': '1',
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.183 Safari/537.36'
     }
+TIME_BETWEEN_UNSUCCESSFUL_REQUESTS = 60 # seconds
+TIMEOUT = 10 # requests.get timeout, seconds
+JOBS_PER_PAGE = 20.
+TMP_FILEPATH = './tmp/scraper.tmp' # in case the script is interrupted
 
-# example URL: https://www.jobs.nhs.uk/xi/vacancy/916247105
-# questions:
-#   how can we identify job description URLs?
-#   how can we extract the information from the page?
-
-def write_job_description_to_json(page_id: str):
-    ''' Parses a job description web page and writes its fields
-        to a JSON file.
-
-        Args:
-            page_id: number in URL to a page with the same template as
-                     https://www.jobs.nhs.uk/xi/vacancy/916243341.
-
-        Returns:
-            nothing
+def graceful_request_to_soup(url):
+    ''' requests.get that handles errors, retries.
     '''
-    url = ' https://www.jobs.nhs.uk/xi/vacancy/' + page_id
-
     try:
-        soup = bs.BeautifulSoup(
-                    requests.get(url, timeout=10, headers=HEADERS).text,
-                    'html.parser')
-    except (requests.exceptions.ConnectTimeout, 
-                requests.exceptions.ReadTimeout):
-        print('ReadTimeout or ConnectTimeout thrown, retrying in 60 seconds...')
-        sleep(60) # wait a bit before retrying
-        soup = bs.BeautifulSoup(
-            requests.get(url, timeout=10, headers=HEADERS).text,
-            'html.parser')
+        r = requests.get(url, timeout=TIMEOUT, headers=HEADERS)
+        soup = bs.BeautifulSoup(r.text, 'html.parser')
 
-    json_str = soup.find('script', # job description in JSON (see end of file)
-                          attrs={'id':'jobPostingSchema'}).contents[0]
-    page_dct = json.loads(json_str)
-    with open('..\\data\\'+page_id+'.json', 'w', encoding='utf-8') as f:
-        json.dump(page_dct, f)
+    except (requests.exceptions.ConnectionError,
+            requests.exceptions.ConnectTimeout, 
+            requests.exceptions.ReadTimeout):
+        logging.info('ReadTimeout or ConnectTimeout thrown, retrying in 60 seconds...')
+        sleep(TIME_BETWEEN_UNSUCCESSFUL_REQUESTS) # wait a bit before retrying
+        soup = graceful_request_to_soup(url)
+    return soup
 
-def iterate_over_vacancy_pages():
+def write_vacancy_urls_to_file():
+    ''' Writes vacancy URLs to file.
+    '''
+    print('URL scraper intialised. Refer to {} for status updates.'.format
+                                                                    (LOG_PATH))
+    search_url_prefix = "https://www.jobs.nhs.uk/xi/search_vacancy?action=page&page="
+    urls_fp = '../data/vacancy_page_urls.txt'
+
+    try: # if scraper.tmp exists, contains 'n_pages,last_page_scraped'
+        logging.info('Resuming scrape.')
+        with open(TMP_FILEPATH, 'r', encoding='utf-8') as f:
+            s = f.read()
+            n_pages, start_page_n = [int(v) for v in s.split(',')]
+            start_page_n += 1
+
+    except FileNotFoundError: # if scraper.tmp does not exist
+        logging.info('Starting scrape.')
+        page1_url = search_url_prefix + str(1)
+        logging.info('Getting page count from page {}.'.format(page1_url))
+        soup = graceful_request_to_soup(page1_url)
+        job_count_txt = soup.find('span', class_='jobCount').get_text()
+        job_count = float(re.sub("[^0-9]", "", job_count_txt))
+        n_pages = ceil(job_count/JOBS_PER_PAGE)
+        logging.info('Determined that there are {} pages to iterate over.'
+                        .format(n_pages))
+        start_page_n = 1
+
+    # iterate over pages of NHS Jobs search results,
+    # writing URLs of pages to file
+    for page_n in range(start_page_n, n_pages+1):
+        logging.info('Scraping URLs from page {} of {}.'.format(page_n,
+                                                                n_pages))
+        soup = graceful_request_to_soup(search_url_prefix + str(page_n))
+
+        # use bs to get vacancy page URL
+        for v in soup.find_all('div', attrs={'class':'vacancy'}):
+            rel_path = v.find('h2').find('a')['href']
+
+            # write vacancy page URL to file
+            with open(urls_fp, 'a', encoding='utf-8') as f:
+                f.write("https://www.jobs.nhs.uk" + rel_path + '\n')
+
+        if page_n < n_pages: # update number of last page scraped in scraper.tmp
+            with open(TMP_FILEPATH, 'w', encoding='utf-8') as f:
+                f.write(str(n_pages) + ',' + str(page_n))
+        if page_n == n_pages: # delete scraper.tmp
+            os.remove(TMP_FILEPATH)
+            logging.info('All vacancy page URLs scraped successfully.')
+
+def write_vacancies_to_json():
     # read in target IDs
     with open('../data/page_urls.txt', 'r', encoding='utf-8') as f:
         list_of_paths = f.read().split('https')[1:]
@@ -89,12 +131,26 @@ def iterate_over_vacancy_pages():
             print('Page format incorrect, continuing...')
             continue
 
-iterate_over_vacancy_pages()
+def write_vacancy_to_json(page_id: str):
+    ''' Parses a job description web page and writes its fields
+        to a JSON file.
 
-#url = 'https://www.jobs.nhs.uk/xi/vacancy/916243341'
-#url = 'https://www.jobs.nhs.uk/xi/vacancy/916243342'
-#write_job_description_to_json(url)
-#load_job_descriptions()
+        Args:
+            page_id: number in URL to a page with the same template as
+                     https://www.jobs.nhs.uk/xi/vacancy/916243341.
+
+        Returns:
+            nothing
+    '''
+    url = ' https://www.jobs.nhs.uk/xi/vacancy/' + page_id
+    soup = graceful_request_to_soup(url)
+    json_str = soup.find('script', # job description in JSON (see end of file)
+                          attrs={'id':'jobPostingSchema'}).contents[0]
+    page_dct = json.loads(json_str)
+    with open('..\\data\\'+page_id+'.json', 'w', encoding='utf-8') as f:
+        json.dump(page_dct, f)
+
+write_vacancy_urls_to_file()
 
 
 # Example of source JSON file
