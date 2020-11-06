@@ -1,3 +1,7 @@
+## TODO:
+#   Rewrite web scraper so that it is reliable
+
+
 # -*- utf-8 -*-
 import dash
 import dash_core_components as dcc

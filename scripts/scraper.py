@@ -7,12 +7,38 @@
 # Summary: Scrapes job descriptions from the NHS Jobs
 #          website and writes them to a JSON list.
 # Contents:
-#   fnc write_vacancy_to_json
-#   fnc write_vacancies_to_json
+#   fnc scrape_vacancies
+#   fnc graceful_request_to_soup
 #   fnc write_vacancy_urls_to_file
-# TODO:
-#   enable running multiple times for scraping at different periods of time
-#   include write merge JSON to dataframe, write to Feather
+#   fnc write_vacancies_to_json
+#   fnc __write_vacancy_to_json
+#   fnc write_json_to_feather
+# Description:
+#   This file contains a function, 
+#       scrape_vacancies
+#   that can be used to snapshot all vacancies on NHS Jobs at a 
+#   particular point in time.
+#     
+#   scrape_vacancies accepts only one argument, 
+#       scrape_id
+#   which identifies the scrape instance. 
+#   A good choice of scrape_id is 
+#       str(int(time.time())).
+#
+#   Because the scrape takes several hours, scrape_vacancies
+#   is designed to recover existing scrape progress if interrupted.
+#   All you need to do to recoveer existing progess is to call
+#       scrape_vacancies(scrape_id)
+#   using the scrape_id of the scrape that was interrupted.
+#
+#   Files output:
+#       ./data/scrape_id/json/*.json
+#       ./data/scrape_id/vacancy_page_urls.csv
+#       ./data/scrape_id/ignored_vacancy_page_urls.csv
+#       ./data/scrape_id/vacancy_descriptions.feather
+#       ./tmp/scrape_id.log
+#       ./tmp/scrape_id.state
+#       ./tmp/scrape_id_page.tmp
 
 import requests
 import bs4 as bs
@@ -25,12 +51,7 @@ import os
 import re
 from math import ceil
 
-LOG_PATH = '..\\logs\\scraper.log'
-logging.basicConfig(filename=LOG_PATH, level=logging.INFO,
-                    format=
-                        '%(asctime)s:%(filename)s:%(funcName)s: %(message)s')
-
-# header spoofing is necessary otherwise NHS Job does not return page
+# header spoofing is necessary otherwise NHS Job does not return pages
 HEADERS = {
         'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
         'accept-encoding': 'gzip, deflate, br',
@@ -47,12 +68,71 @@ HEADERS = {
 TIME_BETWEEN_UNSUCCESSFUL_REQUESTS = 60 # seconds
 TIMEOUT = 10 # requests.get timeout, seconds
 JOBS_PER_PAGE = 20.
-TMP_FILEPATH = '.\\tmp\\scraper.tmp' # in case the script is interrupted
-URLS_FP = '..\\data\\vacancy_page_urls.txt'
-JSON_FP = '..\\data\\json\\'
-IGNORED_IDS_FP = '..\\data\\ignored_page_ids.txt'
+STATE_URLS = '0'
+STATE_JSON = '1'
+STATE_FEATHER = '2'
+STATE_END = '3'
 
-def graceful_request_to_soup(url):
+def scrape_vacancies(scrape_id: str):
+    ''' Scrapes vacancy page URLs from NHS Jobs, downloads vacancy
+        descriptions at these URLs to JSON, merges these JSON
+        files into a Feather dataframe.
+
+        Scrape status is tracked via file ../data/scrape_id.status.
+        Status codes:
+            0: scraping vacancy descriptions urls to vacancy_page_urls.csv
+            1: scraping vacancy descriptions from urls to .json files
+            2: merging .json files into dataframe and writing to Feather
+            3: scrape complete
+    '''
+    # check if required directories exist (make it if not)
+    dirs = [
+            os.path.join('.', 'data'),
+            os.path.join('.', 'data', scrape_id),
+            os.path.join('.', 'tmp')
+    ]
+    for dir_path in dirs:
+        if not os.path.exists(dir_path): os.mkdir(dir_path)
+
+    # check if tmp directory exists (make it if not)
+    tmp_dir = os.path.join('.', 'tmp')
+    if not os.path.exists(tmp_dir): os.mkdir(tmp_dir)
+
+    # configure log
+    log_path = os.path.join('.', 'tmp', scrape_id + '.log')
+    logging.basicConfig(filename=log_path, level=logging.INFO,
+        format='%(asctime)s:%(filename)s:%(funcName)s: %(message)s')
+    logging.info('Scraper intialized. scrape_id is \'{}\'.'.format(scrape_id))
+
+    # check if scrape has previously been started/completed
+    state_fp = os.path.join('.', 'tmp', scrape_id + '.state')
+    try:
+        with open(state_fp, 'r', encoding='utf-8') as state_f:
+            state = state_f.read()
+    except FileNotFoundError:
+        state = STATE_URLS
+        with open(state_fp, 'w', encoding='utf-8') as state_f:
+            state_f.write(state)
+
+    logging.info('Entered state {}'.format(state))
+
+    switchboard = { # maps states to functions
+        STATE_URLS: write_vacancy_urls_to_file, # scrape URLs from index
+        STATE_JSON: write_vacancies_to_json, # scrape JSON at URLs
+        STATE_FEATHER: write_json_to_feather # write JSON to Feather
+    }
+
+    while state != STATE_END:
+        state = switchboard[state](scrape_id)
+        with open(state_fp, 'w', encoding='utf-8') as state_f:
+            state_f.write(state)
+        logging.info('Entered state {}. Updated {}.'.format(
+            state, state_fp))
+
+    logging.info('Scrape \'{}\' complete.'.format(scrape_id))
+
+
+def graceful_request_to_soup(url: str):
     ''' requests.get that handles errors, retries.
     '''
     try:
@@ -67,22 +147,25 @@ def graceful_request_to_soup(url):
         soup = graceful_request_to_soup(url)
     return soup
 
-def write_vacancy_urls_to_file():
+
+def write_vacancy_urls_to_file(scrape_id: str):
     ''' Writes vacancy URLs to file.
+
+        Returns STATE_JSON.
     '''
-    print('URL scraper intialised. Refer to {} for status updates.'.format
-                                                                    (LOG_PATH))
+    urls_fp = os.path.join('.', 'data', scrape_id, 'vacancy_page_urls.csv')
+    urls_tmp_fp = os.path.join('.', 'tmp', scrape_id + '_page.tmp') # tracks n_pages,
+                                                                    # pages_read
+
     search_url_prefix = "https://www.jobs.nhs.uk/xi/search_vacancy?action=page&page="
 
-    try: # if scraper.tmp exists, contains 'n_pages,last_page_scraped'
-        logging.info('Resuming scrape.')
-        with open(TMP_FILEPATH, 'r', encoding='utf-8') as f:
+    try: # if urls_scrape_id.tmp exists, contains 'n_pages,last_page_scraped'
+        with open(urls_tmp_fp, 'r', encoding='utf-8') as f:
             s = f.read()
             n_pages, start_page_n = [int(v) for v in s.split(',')]
             start_page_n += 1
 
-    except FileNotFoundError: # if scraper.tmp does not exist
-        logging.info('Starting scrape.')
+    except FileNotFoundError: # if urls_scrape_id.tmp does not exist
         page1_url = search_url_prefix + str(1)
         logging.info('Getting page count from page {}.'.format(page1_url))
         soup = graceful_request_to_soup(page1_url)
@@ -98,58 +181,79 @@ def write_vacancy_urls_to_file():
     for page_n in range(start_page_n, n_pages+1):
         logging.info('Scraping URLs from page {} of {}.'.format(page_n,
                                                                 n_pages))
+
+        # get page page_n of search results
         soup = graceful_request_to_soup(search_url_prefix + str(page_n))
 
-        # use bs to get vacancy page URL
+        # use bs to get vacancy page URLs
         for v in soup.find_all('div', attrs={'class':'vacancy'}):
             rel_path = v.find('h2').find('a')['href']
 
             # write vacancy page URL to file
-            with open(URLS_FP, 'a', encoding='utf-8') as f:
+            with open(urls_fp, 'a', encoding='utf-8') as f:
                 f.write("https://www.jobs.nhs.uk" + rel_path + '\n')
 
-        if page_n < n_pages: # update number of last page scraped in scraper.tmp
-            with open(TMP_FILEPATH, 'w', encoding='utf-8') as f:
+        if page_n < n_pages: # update number of last page scraped
+            with open(urls_tmp_fp, 'w', encoding='utf-8') as f:
                 f.write(str(n_pages) + ',' + str(page_n))
-        if page_n == n_pages: # delete scraper.tmp
-            os.remove(TMP_FILEPATH)
+        if page_n == n_pages: # delete urls_scrape_id.tmp
+            os.remove(urls_tmp_fp)
             logging.info('All vacancy page URLs scraped successfully.')
 
-def write_vacancies_to_json():
-    logging.info('Scraping vacancy pages based on URLs in {}.'.format(URLS_FP))
+    return STATE_JSON
+
+def write_vacancies_to_json(scrape_id: str):
+    ''' Returns STATE_FEATHER.
+    '''
+    json_dir = os.path.join('.', 'data', scrape_id, 'json', '')
+    try: # make directory for json if it doesn't already exist
+        os.mkdir(json_dir)
+    except FileExistsError:
+        pass
+    
+    ignored_ids_fp = os.path.join('.', 'data', scrape_id,
+                                  'ignored_vacancy_page_urls.csv')
+    urls_fp = os.path.join('.', 'data', scrape_id, 
+                           'vacancy_page_urls.csv')
+
+    logging.info('Scraping vacancy pages based on URLs in {}.'.format(urls_fp))
     # get vacancy ids that have already been captured
     captured_ids = set([v.split('\\')[-1][:-5] 
-                                    for v in glob(JSON_FP + '*.json')])
-    try:
-        with open(IGNORED_IDS_FP, 'r', encoding='utf-8') as f:
+                                    for v in glob(json_dir + '*.json')])
+    try: # get vacancy ids that are to be ignored
+        with open(ignored_ids_fp, 'r', encoding='utf-8') as f:
             ignored_ids = set(f.read().split('\n'))
     except FileNotFoundError:
         ignored_ids = set()
 
     ids_to_skip = captured_ids.union(ignored_ids)
 
-    urls_file = open(URLS_FP, 'r', encoding='utf-8')
-    list_of_urls = urls_file.read().splitlines()
-    n_urls = len(list_of_urls)
+    # load urls to scrape descriptions from
+    with open(urls_fp, 'r', encoding='utf-8') as urls_file:
+        list_of_urls = urls_file.read().splitlines()
+        n_urls = len(list_of_urls)
+    
     for j, page_url in enumerate(list_of_urls):
         logging.info('Scraping vacancy description page {} of {}.'.format(j+1,
                                                                      n_urls))
         page_id = page_url.split('/')[-1] # is a string
         if page_id not in ids_to_skip: 
             try:
-                write_vacancy_to_json(page_id) # download
+                __write_vacancy_to_json(dst_dir=json_dir,
+                                        page_id=page_id) # download
             except AttributeError: # occurs if page isn't structured correctly
                 # add id to ignored ids
-                with open(IGNORED_IDS_FP, 'a', encoding='utf-8') as f:
+                with open(ignored_ids_fp, 'a', encoding='utf-8') as f:
                     f.write(page_id + '\n')
-                logging.info('Page format incorrect, appending page id to {} and skipping.'.format(IGNORED_IDS_FP))
-                continue
+                logging.info('Page format incorrect, appending page id to {} and skipping.'.format(ignored_ids_fp))
+                continue # move on to next page_url
         else:
             logging.info('Skipping vacancy page {}.'.format(page_id))
-    
-    urls_file.close()
 
-def write_vacancy_to_json(page_id: str):
+    return STATE_FEATHER
+
+
+def __write_vacancy_to_json(dst_dir: str, page_id: str):
     ''' Parses a job description web page and writes its fields
         to a JSON file.
     '''
@@ -159,53 +263,31 @@ def write_vacancy_to_json(page_id: str):
     json_str = soup.find('script', # job description in JSON (see end of file)
                           attrs={'id':'jobPostingSchema'}).contents[0]
     page_dct = json.loads(json_str)
-    with open(JSON_FP + page_id + '.json', 'w', encoding='utf-8') as f:
+    with open(dst_dir + page_id + '.json', 'w', encoding='utf-8') as f:
         json.dump(page_dct, f)
 
-#write_vacancy_urls_to_file()
-write_vacancies_to_json()
 
+def write_json_to_feather(scrape_id: str):
+    ''' Reads all .json files in /data into dataframe, saves dataframe
+        in Feather format.
 
-# Example of source JSON file
-# {
-#     "@context": "http://schema.org",
-#     "@type": "JobPosting",
-#     "baseSalary": {
-#         "@type": "MonetaryAmount",
-#         "currency": "GBP",
-#         "value": {
-#             "@type": "QuantitativeValue",
-#             "maxValue": "38694",
-#             "minValue": "38694",
-#             "unitText": "YEAR",
-#             "value": "\u00a338,694 per annum pro rata"
-#         }
-#     },
-#     "datePosted": "2020-10-26T16:16:02+0000",
-#     "description": "&lt;p&gt;&lt;strong&gt;&lt;span&gt;Weston General Hospital is looking to appoint two Clinical Fellows (CT1/2) to our Trust in General Surgery. There is also some financial support to work towards your MRCS qualification. There are dedicated MRCS sessions and for the last 3 years general surgery have achieved 100% pass with all their trainees in securing their MRCS.&lt;/span&gt;&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span&gt;When based in Surgery you will be involved in the care of all general surgical patients at WGH. The surgical specialties provided are upper GI, Colorectal, Breast and general surgery. There is a visiting vascular service. The General surgery department offers care to a wide range of UGI/General Surgery conditions and strives to provide patients with individualised clinic care. Together with our gastroenterology colleagues, we provide an endoscopy service (including gastroscopy and ERCP).&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span&gt;Weston hospital is pleased to be able to provide UKBA sponsorships for candidates who require tier 5 through the Academy of Medical Royal Colleges or alternatively Tier 2 dependent on qualifications already gained. GMC registration requires achievement of an overall score of 7.5 in IELTS.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;&lt;span&gt;The Hospital:&lt;/span&gt;&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span&gt;North Somerset, the surrounding county, has lovely coastline and cliff tops and superb English countryside. You&#39;ll find yourself visiting the Mendip Hills, the Quantocks and Cheddar Gorge sooner or later. The large, diverse cities of Bristol and Bath are only a short journey by car or train and our convenient location just off Junction 21 of the M5 mean the rest of Somerset, Devon and Cornwall are virtually on the doorstep.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span&gt;University Hospitals Bristol and Weston NHS Foundation Trust is committed to safeguarding and promoting the welfare of children, young people and vulnerable adults. All staff must be aware of, and follow Weston Area Health Trust guidance and policies on Safeguarding Children and Vulnerable adults and it is your duty to report any concerns you may have through your line manager and the Trust\u2019s designated Safeguarding Lead.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;For further details / informal visits contact:&lt;/p&gt;\n&lt;p&gt;NameKaren Fifield/Reuben WestJob titleOperational Service Manager for General SurgeryEmail addresskaren.fifield@uhbw.nhs.ukTelephone number01934 636363&lt;/p&gt;",
-#     "employmentType": "FULL_TIME",
-#     "hiringOrganization": {
-#         "@type": "Organization",
-#         "logo": "https://www.jobs.nhs.uk/xi/db_image/logo/120778.png",
-#         "name": "University Hospitals Bristol and Weston NHS Foundation Trust",
-#         "url": "https://www.jobs.nhs.uk/xi/agency_info/?agency_id=120778"
-#     },
-#     "industry": "Healthcare",
-#     "jobLocation": {
-#         "@type": "Place",
-#         "address": {
-#             "@type": "PostalAddress",
-#             "addressCountry": "GB",
-#             "addressLocality": "Weston General Hospital, Weston-super-Mare",
-#             "postalCode": "BS23 4TQ"
-#         },
-#         "geo": {
-#             "@type": "GeoCoordinates",
-#             "latitude": "51.3223",
-#             "longitude": "-2.97141"
-#         }
-#     },
-#     "title": "Clinical Fellow (CT1/2) in General Surgery",
-#     "url": "https://www.jobs.nhs.uk/xi/vacancy/916243341",
-#     "validThrough": "2020-11-08T23:59:59+0000"
-# } 
+        Returns STATE_END.
+    '''
+    logging.info('Initialized write of JSON files to Feather dataframe.')
+    json_dir = os.path.join('.', 'data', scrape_id, 'json', '')
+    json_fps = glob(json_dir + '*.json')
+    list_of_page_dct = []
+    for fp in json_fps: # read all of the files into a list of dicts
+        with open(fp, 'r', encoding='utf-8') as f:
+            list_of_page_dct += [json.load(f)]
+    
+    # flatten the list of dicts to a DataFrame
+    df = pd.json_normalize(list_of_page_dct)
+
+    # write it to a Feather file
+    dst_fp = os.path.join('.', 'data', scrape_id, 
+                          'vacancy_descriptions.feather')
+    df.to_feather(dst_fp)
+    logging.info('Wrote JSON files to Feather dataframe at {}.'.format(dst_fp))
+
+    return STATE_END
