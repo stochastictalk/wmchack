@@ -10,7 +10,9 @@
 #   fnc write_vacancy_to_json
 #   fnc write_vacancies_to_json
 #   fnc write_vacancy_urls_to_file
-# TODO: update JSON writer, include Feather writer
+# TODO:
+#   enable running multiple times for scraping at different periods of time
+#   include write merge JSON to dataframe, write to Feather
 
 import requests
 import bs4 as bs
@@ -139,7 +141,7 @@ def write_vacancies_to_json():
             except AttributeError: # occurs if page isn't structured correctly
                 # add id to ignored ids
                 with open(IGNORED_IDS_FP, 'a', encoding='utf-8') as f:
-                    f.write(page_id)
+                    f.write(page_id + '\n')
                 logging.info('Page format incorrect, appending page id to {} and skipping.'.format(IGNORED_IDS_FP))
                 continue
         else:
