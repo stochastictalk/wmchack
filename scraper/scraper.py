@@ -2,7 +2,7 @@
 
 # Created: 4th November 2020
 # Authors: Jerome Wynne (jeromewynne@das-ltd.co.uk)
-#          Mark Drakeford
+#          Mark Drakeford (began write_vacancies_to_url)
 # Environment: wmchack
 # Summary: Scrapes job descriptions from the NHS Jobs
 #          website and writes them to a JSON list.
@@ -52,6 +52,7 @@ import re
 from math import ceil
 
 # header spoofing is necessary otherwise NHS Job does not return pages
+# if this script breaks in the future, this header is probably the problem!
 HEADERS = {
         'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
         'accept-encoding': 'gzip, deflate, br',
@@ -73,10 +74,9 @@ STATE_JSON = '1'
 STATE_FEATHER = '2'
 STATE_END = '3'
 
+
 def scrape_vacancies(scrape_id: str):
-    ''' Scrapes vacancy page URLs from NHS Jobs, downloads vacancy
-        descriptions at these URLs to JSON, merges these JSON
-        files into a Feather dataframe.
+    ''' Scrapes vacancy descriptions from NHS Jobs to a Feather dataframe.
 
         Scrape status is tracked via file ../data/scrape_id.status.
         Status codes:
@@ -94,15 +94,11 @@ def scrape_vacancies(scrape_id: str):
     for dir_path in dirs:
         if not os.path.exists(dir_path): os.mkdir(dir_path)
 
-    # check if tmp directory exists (make it if not)
-    tmp_dir = os.path.join('.', 'tmp')
-    if not os.path.exists(tmp_dir): os.mkdir(tmp_dir)
-
     # configure log
     log_path = os.path.join('.', 'tmp', scrape_id + '.log')
     logging.basicConfig(filename=log_path, level=logging.INFO,
         format='%(asctime)s:%(filename)s:%(funcName)s: %(message)s')
-    logging.info('Scraper intialized. scrape_id is \'{}\'.'.format(scrape_id))
+    logging.info('Scraper \'{}\' intialized.'.format(scrape_id))
 
     # check if scrape has previously been started/completed
     state_fp = os.path.join('.', 'tmp', scrape_id + '.state')
@@ -110,17 +106,17 @@ def scrape_vacancies(scrape_id: str):
         with open(state_fp, 'r', encoding='utf-8') as state_f:
             state = state_f.read()
     except FileNotFoundError:
-        state = STATE_URLS
+        state = STATE_URLS # enter first state
         with open(state_fp, 'w', encoding='utf-8') as state_f:
             state_f.write(state)
 
     logging.info('Entered state {}'.format(state))
 
     switchboard = { # maps states to functions
-        STATE_URLS: write_vacancy_urls_to_file, # scrape URLs from index
+        STATE_URLS: write_vacancy_urls_to_file, # scrape URLs from search results
         STATE_JSON: write_vacancies_to_json, # scrape JSON at URLs
         STATE_FEATHER: write_json_to_feather # write JSON to Feather
-    }
+    } # each function returns state of next stage of scrape
 
     while state != STATE_END:
         state = switchboard[state](scrape_id)
@@ -132,8 +128,10 @@ def scrape_vacancies(scrape_id: str):
     logging.info('Scrape \'{}\' complete.'.format(scrape_id))
 
 
-def graceful_request_to_soup(url: str):
+def __graceful_request_to_soup(url: str):
     ''' requests.get that handles errors, retries.
+
+        Will retry until request is successful.
     '''
     try:
         r = requests.get(url, timeout=TIMEOUT, headers=HEADERS)
@@ -142,14 +140,17 @@ def graceful_request_to_soup(url: str):
     except (requests.exceptions.ConnectionError,
             requests.exceptions.ConnectTimeout, 
             requests.exceptions.ReadTimeout):
-        logging.info('ReadTimeout or ConnectTimeout thrown, retrying in 60 seconds...')
+        logging.info('Request error thrown, retrying in 60 seconds...')
         sleep(TIME_BETWEEN_UNSUCCESSFUL_REQUESTS) # wait a bit before retrying
         soup = graceful_request_to_soup(url)
     return soup
 
 
-def write_vacancy_urls_to_file(scrape_id: str):
-    ''' Writes vacancy URLs to file.
+def __write_vacancy_urls_to_file(scrape_id: str):
+    ''' Writes vacancy URLs from NHS Jobs search results pages to file.
+
+        URLs are scraped from pages like
+            https://www.jobs.nhs.uk/xi/search_vacancy?action=page&page=1
 
         Returns STATE_JSON.
     '''
@@ -202,25 +203,34 @@ def write_vacancy_urls_to_file(scrape_id: str):
 
     return STATE_JSON
 
-def write_vacancies_to_json(scrape_id: str):
-    ''' Returns STATE_FEATHER.
+
+def __write_vacancies_to_json(scrape_id: str):
+    ''' Writes vacancy descriptions and metadata to JSON files.
+
+        Vacancy descriptions and metadata are scraped from pages like
+            https://www.jobs.nhs.uk/xi/vacancy/916249731
+        A vacancy's ID is the number at the tail of its URL.
+    
+        Returns STATE_FEATHER.
     '''
+    # make directory for json files if it doesn't already exist
     json_dir = os.path.join('.', 'data', scrape_id, 'json', '')
-    try: # make directory for json if it doesn't already exist
+    try:
         os.mkdir(json_dir)
     except FileExistsError:
         pass
     
-    ignored_ids_fp = os.path.join('.', 'data', scrape_id,
-                                  'ignored_vacancy_page_urls.csv')
     urls_fp = os.path.join('.', 'data', scrape_id, 
                            'vacancy_page_urls.csv')
 
     logging.info('Scraping vacancy pages based on URLs in {}.'.format(urls_fp))
-    # get vacancy ids that have already been captured
+    
+    # get vacancy ids for vacancies that have already been captured or ignored
     captured_ids = set([v.split('\\')[-1][:-5] 
                                     for v in glob(json_dir + '*.json')])
-    try: # get vacancy ids that are to be ignored
+    ignored_ids_fp = os.path.join('.', 'data', scrape_id,
+                                  'ignored_vacancy_page_urls.csv')
+    try: # get vacancy ids that have already been ignored
         with open(ignored_ids_fp, 'r', encoding='utf-8') as f:
             ignored_ids = set(f.read().split('\n'))
     except FileNotFoundError:
@@ -233,6 +243,7 @@ def write_vacancies_to_json(scrape_id: str):
         list_of_urls = urls_file.read().splitlines()
         n_urls = len(list_of_urls)
     
+    # iterate over urls, scraping vacancy descriptions and metadata
     for j, page_url in enumerate(list_of_urls):
         logging.info('Scraping vacancy description page {} of {}.'.format(j+1,
                                                                      n_urls))
@@ -245,39 +256,41 @@ def write_vacancies_to_json(scrape_id: str):
                 # add id to ignored ids
                 with open(ignored_ids_fp, 'a', encoding='utf-8') as f:
                     f.write(page_id + '\n')
-                logging.info('Page format incorrect, appending page id to {} and skipping.'.format(ignored_ids_fp))
+                logging.info('Page format incorrect, appending page id' \
+                             ' to {} and skipping.'.format(ignored_ids_fp))
                 continue # move on to next page_url
-        else:
+        else: # vacancy json has already been saved/ignored
             logging.info('Skipping vacancy page {}.'.format(page_id))
 
     return STATE_FEATHER
 
 
 def __write_vacancy_to_json(dst_dir: str, page_id: str):
-    ''' Parses a job description web page and writes its fields
+    ''' Parses a vacancy description web page and writes its fields
         to a JSON file.
     '''
     url = ' https://www.jobs.nhs.uk/xi/vacancy/' + page_id
     logging.info('Scraping vacancy description at {}.'.format(url))
     soup = graceful_request_to_soup(url)
-    json_str = soup.find('script', # job description in JSON (see end of file)
+    json_str = soup.find('script', # job description in JSON 
                           attrs={'id':'jobPostingSchema'}).contents[0]
     page_dct = json.loads(json_str)
     with open(dst_dir + page_id + '.json', 'w', encoding='utf-8') as f:
         json.dump(page_dct, f)
 
 
-def write_json_to_feather(scrape_id: str):
-    ''' Reads all .json files in /data into dataframe, saves dataframe
-        in Feather format.
+def __write_json_to_feather(scrape_id: str):
+    ''' Reads all .json files in ./data/scrape_id/json/ into dataframe,
+        saves dataframe in Feather format.
 
         Returns STATE_END.
     '''
     logging.info('Initialized write of JSON files to Feather dataframe.')
+
     json_dir = os.path.join('.', 'data', scrape_id, 'json', '')
     json_fps = glob(json_dir + '*.json')
     list_of_page_dct = []
-    for fp in json_fps: # read all of the files into a list of dicts
+    for fp in json_fps: # read all of the json files into a list of dicts
         with open(fp, 'r', encoding='utf-8') as f:
             list_of_page_dct += [json.load(f)]
     
