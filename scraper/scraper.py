@@ -8,37 +8,11 @@
 #          website and writes them to a JSON list.
 # Contents:
 #   fnc scrape_vacancies
-#   fnc graceful_request_to_soup
-#   fnc write_vacancy_urls_to_file
-#   fnc write_vacancies_to_json
+#   fnc __graceful_request_to_soup
+#   fnc __write_vacancy_urls_to_file
+#   fnc __write_vacancies_to_json
 #   fnc __write_vacancy_to_json
-#   fnc write_json_to_feather
-# Description:
-#   This file contains a function, 
-#       scrape_vacancies
-#   that can be used to snapshot all vacancies on NHS Jobs at a 
-#   particular point in time.
-#     
-#   scrape_vacancies accepts only one argument, 
-#       scrape_id
-#   which identifies the scrape instance. 
-#   A good choice of scrape_id is 
-#       str(int(time.time())).
-#
-#   Because the scrape takes several hours, scrape_vacancies
-#   is designed to recover existing scrape progress if interrupted.
-#   All you need to do to recoveer existing progess is to call
-#       scrape_vacancies(scrape_id)
-#   using the scrape_id of the scrape that was interrupted.
-#
-#   Files output:
-#       ./data/scrape_id/json/*.json
-#       ./data/scrape_id/vacancy_page_urls.csv
-#       ./data/scrape_id/ignored_vacancy_page_urls.csv
-#       ./data/scrape_id/vacancy_descriptions.feather
-#       ./tmp/scrape_id.log
-#       ./tmp/scrape_id.state
-#       ./tmp/scrape_id_page.tmp
+#   fnc __write_json_to_feather
 
 import requests
 import bs4 as bs
@@ -51,21 +25,6 @@ import os
 import re
 from math import ceil
 
-# header spoofing is necessary otherwise NHS Job does not return pages
-# if this script breaks in the future, this header is probably the problem!
-HEADERS = {
-        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-        'accept-encoding': 'gzip, deflate, br',
-        'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-        'cache-control': 'max-age=0',
-        'cookie': 'general_session=F69F3B6C1E8911EB8AA577ACEE0D0942',
-        'sec-fetch-dest': 'document',
-        'sec-fetch-mode': 'navigate',
-        'sec-fetch-site': 'none',
-        'sec-fetch-user': '?1',
-        'upgrade-insecure-requests': '1',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.183 Safari/537.36'
-    }
 TIME_BETWEEN_UNSUCCESSFUL_REQUESTS = 60 # seconds
 TIMEOUT = 10 # requests.get timeout, seconds
 JOBS_PER_PAGE = 20.
@@ -75,15 +34,38 @@ STATE_FEATHER = '2'
 STATE_END = '3'
 
 
-def scrape_vacancies(scrape_id: str):
+def scrape_vacancies(scrape_id: str, cookie: str):
     ''' Scrapes vacancy descriptions from NHS Jobs to a Feather dataframe.
 
-        Scrape status is tracked via file ../data/scrape_id.status.
-        Status codes:
-            0: scraping vacancy descriptions urls to vacancy_page_urls.csv
-            1: scraping vacancy descriptions from urls to .json files
-            2: merging .json files into dataframe and writing to Feather
-            3: scrape complete
+    Refer to /tmp/scrape_id.log for updates on scrape progress.
+
+    Because the scrape takes several hours, scrape_vacancies is 
+    designed to recover existing scrape progress if interrupted.
+    To recover existing progess, call
+        scrape_vacancies(scrape_id)
+    using the scrape_id of the scrape that was interrupted.
+
+    The status of a scrape is tracked via file ../data/scrape_id.status.
+    Status codes:
+        0: scraping vacancy descriptions urls to vacancy_page_urls.csv
+        1: scraping vacancy descriptions from urls to .json files
+        2: merging .json files into dataframe and writing to Feather
+        3: scrape complete
+
+    Args:
+        scrape_id: uniquely identifies the scrape. A good choice is 
+                   str(int(time.time())).
+        cookie: string containing cookie for NHS Jobs search
+                (refer to example.py for further info).
+
+    Files output:
+        ./data/scrape_id/json/*.json
+        ./data/scrape_id/vacancy_page_urls.csv
+        ./data/scrape_id/ignored_vacancy_page_urls.csv
+        ./data/scrape_id/vacancy_descriptions.feather
+        ./tmp/scrape_id.log
+        ./tmp/scrape_id.state
+        ./tmp/scrape_id_page.tmp
     '''
     # check if required directories exist (make it if not)
     dirs = [
@@ -113,13 +95,13 @@ def scrape_vacancies(scrape_id: str):
     logging.info('Entered state {}'.format(state))
 
     switchboard = { # maps states to functions
-        STATE_URLS: write_vacancy_urls_to_file, # scrape URLs from search results
-        STATE_JSON: write_vacancies_to_json, # scrape JSON at URLs
-        STATE_FEATHER: write_json_to_feather # write JSON to Feather
+        STATE_URLS: __write_vacancy_urls_to_file, # scrape URLs from search results
+        STATE_JSON: __write_vacancies_to_json, # scrape JSON at URLs
+        STATE_FEATHER: __write_json_to_feather # write JSON to Feather
     } # each function returns state of next stage of scrape
 
     while state != STATE_END:
-        state = switchboard[state](scrape_id)
+        state = switchboard[state](scrape_id, cookie)
         with open(state_fp, 'w', encoding='utf-8') as state_f:
             state_f.write(state)
         logging.info('Entered state {}. Updated {}.'.format(
@@ -128,13 +110,16 @@ def scrape_vacancies(scrape_id: str):
     logging.info('Scrape \'{}\' complete.'.format(scrape_id))
 
 
-def __graceful_request_to_soup(url: str):
+def __graceful_request_to_soup(url: str, cookie:str):
     ''' requests.get that handles errors, retries.
 
         Will retry until request is successful.
     '''
+    header = {'cookie':cookie}
+
     try:
-        r = requests.get(url, timeout=TIMEOUT, headers=HEADERS)
+        r = requests.get(url, timeout=TIMEOUT, headers=header)
+        logging.info('Request status code is {}.'.format(r.status_code))
         soup = bs.BeautifulSoup(r.text, 'html.parser')
 
     except (requests.exceptions.ConnectionError,
@@ -142,11 +127,11 @@ def __graceful_request_to_soup(url: str):
             requests.exceptions.ReadTimeout):
         logging.info('Request error thrown, retrying in 60 seconds...')
         sleep(TIME_BETWEEN_UNSUCCESSFUL_REQUESTS) # wait a bit before retrying
-        soup = graceful_request_to_soup(url)
+        soup = __graceful_request_to_soup(url, cookie)
     return soup
 
 
-def __write_vacancy_urls_to_file(scrape_id: str):
+def __write_vacancy_urls_to_file(scrape_id: str, cookie:str):
     ''' Writes vacancy URLs from NHS Jobs search results pages to file.
 
         URLs are scraped from pages like
@@ -158,7 +143,7 @@ def __write_vacancy_urls_to_file(scrape_id: str):
     urls_tmp_fp = os.path.join('.', 'tmp', scrape_id + '_page.tmp') # tracks n_pages,
                                                                     # pages_read
 
-    search_url_prefix = "https://www.jobs.nhs.uk/xi/search_vacancy?action=page&page="
+    search_url_prefix = 'https://www.jobs.nhs.uk/xi/search_vacancy?action=page&page='
 
     try: # if urls_scrape_id.tmp exists, contains 'n_pages,last_page_scraped'
         with open(urls_tmp_fp, 'r', encoding='utf-8') as f:
@@ -169,9 +154,9 @@ def __write_vacancy_urls_to_file(scrape_id: str):
     except FileNotFoundError: # if urls_scrape_id.tmp does not exist
         page1_url = search_url_prefix + str(1)
         logging.info('Getting page count from page {}.'.format(page1_url))
-        soup = graceful_request_to_soup(page1_url)
+        soup = __graceful_request_to_soup(page1_url, cookie)
         job_count_txt = soup.find('span', class_='jobCount').get_text()
-        job_count = float(re.sub("[^0-9]", "", job_count_txt))
+        job_count = float(re.sub('[^0-9]', '', job_count_txt))
         n_pages = ceil(job_count/JOBS_PER_PAGE)
         logging.info('Determined that there are {} pages to iterate over.'
                         .format(n_pages))
@@ -184,7 +169,8 @@ def __write_vacancy_urls_to_file(scrape_id: str):
                                                                 n_pages))
 
         # get page page_n of search results
-        soup = graceful_request_to_soup(search_url_prefix + str(page_n))
+        soup = __graceful_request_to_soup(search_url_prefix + str(page_n),
+                                          cookie)
 
         # use bs to get vacancy page URLs
         for v in soup.find_all('div', attrs={'class':'vacancy'}):
@@ -192,7 +178,7 @@ def __write_vacancy_urls_to_file(scrape_id: str):
 
             # write vacancy page URL to file
             with open(urls_fp, 'a', encoding='utf-8') as f:
-                f.write("https://www.jobs.nhs.uk" + rel_path + '\n')
+                f.write('https://www.jobs.nhs.uk' + rel_path + '\n')
 
         if page_n < n_pages: # update number of last page scraped
             with open(urls_tmp_fp, 'w', encoding='utf-8') as f:
@@ -204,7 +190,7 @@ def __write_vacancy_urls_to_file(scrape_id: str):
     return STATE_JSON
 
 
-def __write_vacancies_to_json(scrape_id: str):
+def __write_vacancies_to_json(scrape_id: str, cookie: str):
     ''' Writes vacancy descriptions and metadata to JSON files.
 
         Vacancy descriptions and metadata are scraped from pages like
@@ -226,7 +212,7 @@ def __write_vacancies_to_json(scrape_id: str):
     logging.info('Scraping vacancy pages based on URLs in {}.'.format(urls_fp))
     
     # get vacancy ids for vacancies that have already been captured or ignored
-    captured_ids = set([v.split('\\')[-1][:-5] 
+    captured_ids = set([os.path.split(v)[-1][:-5] 
                                     for v in glob(json_dir + '*.json')])
     ignored_ids_fp = os.path.join('.', 'data', scrape_id,
                                   'ignored_vacancy_page_urls.csv')
@@ -251,7 +237,8 @@ def __write_vacancies_to_json(scrape_id: str):
         if page_id not in ids_to_skip: 
             try:
                 __write_vacancy_to_json(dst_dir=json_dir,
-                                        page_id=page_id) # download
+                                        page_id=page_id,
+                                        cookie=cookie) # download
             except AttributeError: # occurs if page isn't structured correctly
                 # add id to ignored ids
                 with open(ignored_ids_fp, 'a', encoding='utf-8') as f:
@@ -265,13 +252,13 @@ def __write_vacancies_to_json(scrape_id: str):
     return STATE_FEATHER
 
 
-def __write_vacancy_to_json(dst_dir: str, page_id: str):
+def __write_vacancy_to_json(dst_dir: str, page_id: str, cookie: str):
     ''' Parses a vacancy description web page and writes its fields
         to a JSON file.
     '''
     url = ' https://www.jobs.nhs.uk/xi/vacancy/' + page_id
     logging.info('Scraping vacancy description at {}.'.format(url))
-    soup = graceful_request_to_soup(url)
+    soup = __graceful_request_to_soup(url, cookie)
     json_str = soup.find('script', # job description in JSON 
                           attrs={'id':'jobPostingSchema'}).contents[0]
     page_dct = json.loads(json_str)
@@ -279,7 +266,7 @@ def __write_vacancy_to_json(dst_dir: str, page_id: str):
         json.dump(page_dct, f)
 
 
-def __write_json_to_feather(scrape_id: str):
+def __write_json_to_feather(scrape_id: str, _: str):
     ''' Reads all .json files in ./data/scrape_id/json/ into dataframe,
         saves dataframe in Feather format.
 
