@@ -8,6 +8,6 @@
 from scraper import scrape_vacancies
 from time import time # to generate a timestamp for the scrape
 
-scrape_id: str = 'eXaMpLe'
-scrape_vacancies_to_feather(scrape_id)
+scrape_id: str = 'example'
+scrape_vacancies(scrape_id)
 
