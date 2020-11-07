@@ -2,7 +2,7 @@
 
 # Created: 4th November 2020
 # Authors: Jerome Wynne (jeromewynne@das-ltd.co.uk)
-#          Mark Drakeford (began write_vacancies_to_url)
+#          Mark Drakeford (began __write_vacancy_urls_to_file)
 # Environment: wmchack
 # Summary: Scrapes job descriptions from the NHS Jobs
 #          website and writes them to a JSON list.
