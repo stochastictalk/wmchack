@@ -5,7 +5,7 @@
 # Environment: wmchack
 # Summary: Demo of how to use scraper.py.
 
-# To scrape NHS Jobs, you need a cookie that identifies your search.
+# To scrape NHS Jobs you need a cookie that identifies your search.
 # You can get this cookie by following these steps.
 # 1. Open your web browser and go to www.jobs.nhs.uk.
 # 2. Click 'Accept all cookies'.
