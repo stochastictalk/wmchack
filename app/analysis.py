@@ -3,7 +3,7 @@
 # Created: 7th November 2020
 # Author: Jerome Wynne (jeromewynne@das-ltd.co.uk)
 # Environment: wmchack
-# Summary: functions for a pp.py
+# Summary: functions for app.py
 
 from nltk.corpus.reader import CategorizedPlaintextCorpusReader
 import pandas as pd
@@ -88,5 +88,6 @@ def read_corpus(corpus_id: str):
     reader = CategorizedPlaintextCorpusReader(
                 corpus_root_dir,
                 r'.*\.txt', # fileid pattern,
-                cat_pattern=r'.*___(.+)\.txt')
+                cat_pattern=r'.*___(.+)\.txt',
+                encoding='utf8')
     return reader
