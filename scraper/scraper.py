@@ -58,6 +58,9 @@ def scrape_vacancies(scrape_id: str, cookie: str):
         cookie: string containing cookie for NHS Jobs search
                 (refer to example.py for further info).
 
+    Returns:
+        nothing
+
     Files output:
         ./data/scrape_id/json/*.json
         ./data/scrape_id/vacancy_page_urls.csv
@@ -113,6 +116,9 @@ def scrape_vacancies(scrape_id: str, cookie: str):
 def __graceful_request_to_soup(url: str, cookie:str):
     ''' requests.get that handles errors, retries.
 
+        Returns:
+            bs.BeautifulSoup: is bs.Beatifulsoup(requests.get(url))
+
         Will retry until request is successful.
     '''
     header = {'cookie':cookie}
@@ -137,7 +143,8 @@ def __write_vacancy_urls_to_file(scrape_id: str, cookie:str):
         URLs are scraped from pages like
             https://www.jobs.nhs.uk/xi/search_vacancy?action=page&page=1
 
-        Returns STATE_JSON.
+        Returns:
+            int: STATE_JSON
     '''
     urls_fp = os.path.join('.', 'data', scrape_id, 'vacancy_page_urls.csv')
     urls_tmp_fp = os.path.join('.', 'tmp', scrape_id + '_page.tmp') # tracks n_pages,
@@ -197,7 +204,8 @@ def __write_vacancies_to_json(scrape_id: str, cookie: str):
             https://www.jobs.nhs.uk/xi/vacancy/916249731
         A vacancy's ID is the number at the tail of its URL.
     
-        Returns STATE_FEATHER.
+        Returns:
+            int: STATE_FEATHER
     '''
     # make directory for json files if it doesn't already exist
     json_dir = os.path.join('.', 'data', scrape_id, 'json', '')
@@ -255,6 +263,9 @@ def __write_vacancies_to_json(scrape_id: str, cookie: str):
 def __write_vacancy_to_json(dst_dir: str, page_id: str, cookie: str):
     ''' Parses a vacancy description web page and writes its fields
         to a JSON file.
+
+        Returns:
+            nothing
     '''
     url = ' https://www.jobs.nhs.uk/xi/vacancy/' + page_id
     logging.info('Scraping vacancy description at {}.'.format(url))
