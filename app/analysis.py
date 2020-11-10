@@ -230,35 +230,51 @@ def tf_idf(corpus_types: dict, corpus_words: dict,
     return s_termfreq, s_tf_idf
 
 
-def similar_words(query_word: str, df_tf_idf: pd.DataFrame, N=10):
+def similar_words(query_word: str, token_index: dict,
+                  s_tfidf: sparse.COO, N=10):
     ''' Returns words that are specific to documents that containing the query word.
     '''
-    # Get tf_idf submatrix of documents that contain query word
-    df_docs = df_tf_idf.query(query_word + ' > 0')
-    
-    # Return top n words with highest mean tf-idf
-    return(df_docs.mean(axis=0).nlargest(n=N))
+    try:
+        # get indices of files that feature query word
+        j = token_index[query_word]
+    except KeyError as e:
+        raise KeyError('0 files feature query word \'{}\''.format(query_word))
+    else:
+        fileid_ix = s_tfidf[:, j].coords.flatten() # list of relevant file ix
 
+        # within these files, compute mean tf-idf for all tokens
+        mean_tfidf = s_tfidf[fileid_ix, :].mean(axis=0).todense() # for each token
 
-def jacard_index(df_tf: pd.DataFrame, fileid):
-    ''' Returns Jacard index data frame.
-    
-        This function carries its calculations in using the sparse lib.
-        https://sparse.pydata.org/en/stable/generated/sparse.html
-        Operating directly on DataFrames is too slow, while
-        standard numpy arrays consume too much memory.
+        # cast numpy array to labelled series, so we known what the tokens are
+        ser_mean_tfidf = pd.Series(
+                            data=mean_tfidf, 
+                            index=sorted(token_index.keys(),
+                                         key=lambda k: token_index[k])
+                        )
+        
+        # return top n words with highest mean tf-idf
+        return ser_mean_tfidf.nlargest(n=N)
+        
+
+def jacard_index(s_tf: sparse.COO, fileid: str, fileid_index: dict):
+    ''' Returns Jacard index Series for file 'fileid'.
     '''
-    fileids = df_tf.index
-    s_inc = sparse.COO((df_tf > 0).values) # word incidence matrix
-    i = df_tf.index.get_loc(fileid)
+    # get word incidence matrix
+    s_inc = (s_tf > 0) # word incidence matrix
+
+    # compute Jacard index - types_shared/total_types (betw. two files)
+    i = fileid_index[fileid] # index of fileid
     s_inc_row_stretched = s_inc[i, :]*sparse.ones(shape=s_inc.shape)
     tmp = np.stack([s_inc, s_inc_row_stretched], axis=-1)
     types_in_intersection = tmp.min(axis=-1).sum(axis=1)
     types_in_union = tmp.max(axis=-1).sum(axis=1)
-    # nb a 'type' is an element of set(words_in_document)
-    
+    # nb a 'type' is an element of set(list_of_tokens)
     m_ji = types_in_intersection.todense()/types_in_union.todense()
-    ser_ji = pd.Series(m_ji, index=fileids)
+
+    # cast to Series
+    ser_ji = pd.Series(m_ji,
+                      index=sorted(fileid_index.keys(),
+                                   key=lambda k: fileid_index[k]))
     
     return ser_ji.sort_values(ascending=False)
 
