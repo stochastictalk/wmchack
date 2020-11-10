@@ -8,79 +8,11 @@ import dash_core_components as dcc
 import dash_html_components as dhtml
 from dash.dependencies import Input, Output
 import dash_table as dtable
-from datetime import datetime, date, timezone, timedelta
 import plotly.express as px
-import pandas as pd
-from glob import glob
-import json
-import numpy as np
-import json
+import analysis as an
 
-
-# from nb
-import pandas as pd
-from glob import glob
-import json
-from time import time
-import html
-import nltk
-from matplotlib import pyplot as plt
-import seaborn as sns
-sns.set_style('darkgrid')
-import numpy as np
-from itertools import combinations_with_replacement
-
-# data read and prep
-fp = glob('../data/*.feather')[0]
-df = pd.read_feather(fp)
-ser_desc = df['description'] 
-ser_desc.index = df['url']
-
-def preprocess(ser_desc: pd.Series):
-    ser_desc = ser_desc.copy()
-    ser_desc = ser_desc.apply(lambda value: html.unescape(value)) # replace entities
-    ser_desc = ser_desc.str.replace(pat='<\/?[^>]*>', repl='') # strip html tags
-    ser_desc = ser_desc.str.replace(pat='\\n', repl=' ') # strip newline chars
-    ser_desc = ser_desc.str.lower()
-    ser_desc = ser_desc.apply(lambda value: nltk.word_tokenize(value)) # splits string into list of tokens
-    ser_desc = ser_desc.apply(lambda value: nltk.Text(value))
-    #porter = nltk.PorterStemmer()
-    #ser_desc = ser_desc.apply(lambda lst: [porter.stem(t) for t in lst]) 
-    df_desc = ser_desc.to_frame()
-    df_desc.columns = ['text']
-    return df_desc
-
-def get_keyword_presence(df_text: pd.DataFrame):
-    ''' Creates a data frame containing counts of keywords.
-    ''' 
-    keywords = sorted(['analyst', 'analysis', 'analytical', 'data', 'prediction', 'predictive',
-                       'sql', 'python', 'r', 'digital', 'software', 'automation', 'automate',
-                       'maths', 'mathematics', 'physics', 'etl', 'informatics', 'bioinformatics',
-                       'statistics', 'computing', 'computer science', 'excel', 'tableau', 'machine',
-                       'programming', 'receptionist'])
-    df_out = df_text.apply(axis=1, 
-                           func=lambda rec: [float(rec['text'].count(kw) > 0) for kw in keywords],
-                           result_type='expand')
-    df_out.columns = keywords
-    return df_out
-
-df_text = ser_desc.pipe(preprocess) # field 'text' contains nltk Text objs
-df_kw = get_keyword_presence(df_text)
-
-def get_keyword_presence(df_text: pd.DataFrame):
-    ''' Creates a data frame containing counts of keywords.
-    ''' 
-    keywords = sorted(['analyst', 'analysis', 'analytical', 'data', 'prediction', 'predictive',
-                       'sql', 'python', 'r', 'digital', 'software', 'automation', 'automate',
-                       'maths', 'mathematics', 'physics', 'etl', 'informatics', 'bioinformatics',
-                       'statistics', 'computing', 'computer science', 'excel', 'tableau', 'machine',
-                       'programming', 'receptionist'])
-    df_out = df_text.apply(axis=1, 
-                           func=lambda rec: [float(rec['text'].count(kw) > 0) for kw in keywords],
-                           result_type='expand')
-    df_out.columns = keywords
-    return df_out
-
+# Load data
+data = an.load_viz_data()
 #### DASH STUFF
 
 
