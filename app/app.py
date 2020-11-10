@@ -8,142 +8,82 @@ import dash_core_components as dcc
 import dash_html_components as dhtml
 from dash.dependencies import Input, Output
 import dash_table as dtable
-import plotly.express as px
 import analysis as an
+import viz as viz
 
 # Load data
 data = an.load_viz_data()
-#### DASH STUFF
+data['n_unique_words'] = len(set.union(
+                            *[set(txt) for txt in data['corpus_raw'].values()]
+                        ))
+data['example_fileid'] = list(data['corpus_raw'].keys())[777]
 
-
-# Want to develop a tool that has a time slider and renders the headlines
+# intialize app obj
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-
-# Intialize app obj
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
-example_json_fp = '../data/example.json'
-with open(example_json_fp, 'r', encoding='utf-8') as f:
-    example_json = json.dumps(json.loads(f.read()), indent=4, sort_keys=True)
+# include visualizations
+e_header = [dcc.Markdown('''
+_© 2020 Decision Analysis Services Ltd._
 
-# Define app layout
-element_header = [
+# **Text Mining Web Application**
+''')]
+
+corpus_id = 'Vacancy descriptions featured on NHS Jobs on 7th Nov 2020'
+offset = 15
+e_corpus_spec = [
     dcc.Markdown('''
+    #### **Corpus Specification**
 
-_NHS Wales Data Hackathon, 4th and 5th November 2020 with the WMC, WHAN and SeRP_
+    **Data source:**  ''' + '&nbsp;'*(offset-12) 
+    + corpus_id
+    + '''  
 
-# **Classifying job roles: An NLP challenge using NHS Job descriptions**
+    **Files:** ''' + '&nbsp;'*offset
+    + '{:,}'.format(data['n_files'])
+    + '''  
 
-This app summarizes the project and explores the properties of vacancy\
- descriptions from the [NHS Jobs website](https://www.jobs.nhs.uk/).
+    **Words:** ''' + '&nbsp;'*(offset-2) 
+    + '{:,}'.format(data['n_words'])
+    + '''  
 
-The scripts and requirements for this application are available through \
-[this Github repository](https://github.com/stochastictalk/wmchack).
+    **Unique words:** ''' + '&nbsp;'*(offset - 14)
+    + '{:,}'.format(data['n_unique_words'])
+    + '''  
 
----
+    **Sample file tokens from file ''' 
+    + '`{}`'.format(data['example_fileid']) 
+    + ''':**  
+    > ```'''
+    + ', '.join((data['corpus_raw'])[data['example_fileid']])[1:-1]
+    + '''```
 
-## **Project overview**
-#### **[1. Data retrieval and Storage](#sec1)**  
-#### **[2. Preprocessing the Vacancy Descriptions](#sec2)**
-#### **[3. Analysis and Visualization](#sec3)**
+    **Distribution of file lengths**:  ''' 
+    ),
 
----
-'''),
-
-dhtml.A('1. Data Retrieval and Storage', href='#sec1',
-        style={'font-size':'24px', 'font-weight':'bold'}),
-dhtml.Br(),
-dcc.Markdown(
-'''
- **Summary**  
- 1. Scraped vacancy descriptions from NHS Jobs as separate local JSON files.  
- 2. Merged JSON files into a table and saved to a 16MB Feather file.  
- Relevant scripts:  
-* `/scripts/job_description_scraper.py`  
-* first section of `/scripts/job_description_analysis.ipynb`  
-  
-  
-**Details**  
-
- Vacancy descriptions were scraped from `jobs.nhs.uk` and written to\
- disk as JSON files. 
-
- HTTP headers needed to be spoofed to look like they were coming from a browser. 
- 
- Not all current vacancy descriptions on NHS Jobs were captured.
- 
- Some vacancy pages\
- did not serve the vacancy information in the correct format - this was\
- true for about 1 in 10 vacancies.
-
- Accessing each vacancy's page was the bottleneck in retrieving\
- vacancy descriptions. Although the capture script ran for ~2 hours,
- only ~4000 of ~17000 current vacancies were scraped.
-
-The JSON captured from a vacancy page allowed descriptions and meta data\
-to be extracted relatively easily.
-
-An example of the JSON for a single vacancy:  
-```''' +
- example_json +
-'''
-```
-'''),
-
-dhtml.Br(), dhtml.Br(),
-dhtml.A('2. Preprocessing the Vacancy Descriptions', href='#sec2',
-        style={'font-size':'24px', 'font-weight':'bold'}),
-dhtml.Br(),
-dcc.Markdown('''
- **Summary**  
- 1. Stripped HTML entities and tags.  
- 2. Stripped newline characters.  
- 3. Cast to lowercase.  
- 4. Removed stop words.  
- Relevant script:  
- * `/scripts/job_description_analysis.ipynb`
-
-
- **Details**  
-Example input to the preprocessing pipeline, from [this job ad](''' +
-ser_desc.index[0] +
-'''):    
-```
-''' +
-ser_desc.iloc[0] +
-'''
-```
-
-Corresponding output from preprocessing pipeline:  
-
-```  
-''' +
-"['" + "', '".join(list(df_text['text'][0])) + "']" +
-'''
-
-```  
-'''),
-
-dhtml.Br(), dhtml.Br(),
-dhtml.A('3. Analysis & Visualization', href='#sec3',
-        style={'font-size':'24px', 'font-weight':'bold'}),
-dhtml.Br(),
-
-
-dhtml.Img(src='https://github.com/stochastictalk/wmchack/blob/main/data/img/001.png?raw=true',
-          width=600),
-
-dhtml.Img(src='https://github.com/stochastictalk/wmchack/blob/main/data/img/002.png?raw=true',
-          width=600)
-
+    dcc.Graph(
+        id='file_lengths',
+        figure=viz.plot_cdf_of_file_lengths(data),
+        style={
+            'width':'700px',
+            'height':'400px',
+            'display':'block',
+            'margin-left':'auto',
+            'margin-right':'auto'
+        }
+    )
 ]
 
 app.layout = dhtml.Div([
-    *element_header
-], style={'width': '60%', 'margin':'auto'})
+    *e_header,
+    dhtml.Hr(),
+    *e_corpus_spec,
+], 
+style={'width': '60%', 'margin':'auto'}
+)
 
 
-# Define callbacks
+# define callbacks
 
 
 
