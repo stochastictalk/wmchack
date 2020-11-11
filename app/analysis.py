@@ -19,7 +19,7 @@ from itertools import product
 
 STOPWORDS_SET = set(stopwords.words('english'))
 PUNCTUATION_SET = set(v for v in string.punctuation)
-PUNCTUATION_SET = PUNCTUATION_SET.union(set(['’', '‘', '•']))
+PUNCTUATION_SET = PUNCTUATION_SET.union(set(['’', '‘', '•', '–']))
 PUNCTUATION_SET = set(''.join(tup) for k in [1,2,3] 
                   for tup in product(PUNCTUATION_SET, repeat=k))
 STOPWORDS_PUNCTUATION_SET = PUNCTUATION_SET.union(STOPWORDS_SET)
@@ -247,20 +247,32 @@ def similar_words(query_word: str, token_index: dict,
         fileid_ix = s_tfidf[:, j].coords.flatten() # list of relevant file ix
 
         # within these files, compute mean tf-idf for all tokens
-        mean_tfidf = s_tfidf[fileid_ix, :].mean(axis=0).todense() # for each token
+        s_tfidf_sub = s_tfidf[fileid_ix, :] 
+        m_mean_tfidf = s_tfidf_sub.mean(axis=0).todense() # for each token
 
-        # cast numpy array to labelled series, so we known what the tokens are
-        df = pd.DataFrame(
-                         data=mean_tfidf, 
-                         index=sorted(token_index.keys(),
-                                      key=lambda k: token_index[k]),
-                         columns=['Mean tf-idf']
-        )
-        df.index = df.index.rename('Token')
-        df = df.reset_index(drop=False)
+        # get number of files in corpus
+        n_files_in_corpus = len(token_index.keys())
+
+        # get number of files with term
+        m_files_with_term = (s_tfidf > 0).sum(axis=0).todense()
+
+        # compute incidence of these tokens in files where query_word appears
+        m_term_inc_sub = 100.*((s_tfidf_sub > 0).mean(axis=0).todense())
+
+        # compute incidence of tokens in all files
+        m_term_inc = 100.*(m_files_with_term/n_files_in_corpus)
+
+        # cast to dataframe
+        df = pd.DataFrame({
+            'Token': sorted(token_index.keys(), key=lambda k: token_index[k]),
+            'Score': m_mean_tfidf,
+            '% of keyword files w token': m_term_inc_sub,
+            '# of files w token': m_files_with_term,
+            '% of files w token': m_term_inc
+        })
         
         # return top n words with highest mean tf-idf
-        return df.nlargest(n=N, columns='Mean tf-idf')
+        return df.nlargest(n=N, columns='Score')
         
 
 def jacard_index(s_tf: sparse.COO, fileid: str, fileid_index: dict):

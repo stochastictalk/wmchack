@@ -129,9 +129,19 @@ def get_fig_most_common_tokens(data, N=100):
     return fig
 
 def get_table_of_similar_words(data, keyword, N=10):
-    #df = pd.DataFrame({'a':[0, 1, 2], 'b':[4, 5, 6]})
+    # get dataframe containing top N most similar words
     df_similar = an.similar_words(keyword, data['token_index'],
                                   data['s_tfidf'], N=N)
+    # format numeric cols to strings
+    for coln in df_similar.columns:
+        if coln not in ['Token', '# of files w token']:
+            df_similar[coln] = df_similar[coln].apply(
+                lambda v: '{:4.1f}'.format(v)
+            )
+        if coln == '# of files w token':
+            df_similar[coln] = df_similar[coln].apply(
+                lambda v: '{:,}'.format(v)
+            )
     return __generate_table(df_similar, max_rows=N)
 
 def __generate_table(dataframe, max_rows=10):
@@ -139,11 +149,15 @@ def __generate_table(dataframe, max_rows=10):
     '''
     return dhtml.Table([
         dhtml.Thead(
-            dhtml.Tr([dhtml.Th(col) for col in dataframe.columns])
+            dhtml.Tr([dhtml.Th(col, style={'text-align':'center'})
+                      for col in dataframe.columns],
+                      style={'line-height': '11px' })
         ),
         dhtml.Tbody([
             dhtml.Tr([
-                dhtml.Td(dataframe.iloc[i][col]) for col in dataframe.columns
-            ]) for i in range(min(len(dataframe), max_rows))
+                dhtml.Td(dataframe.iloc[i][col], style={'text-align':'center'})
+                for col in dataframe.columns
+            ], style={'line-height': '11px' })
+            for i in range(min(len(dataframe), max_rows))
         ])
-    ])
+    ], style={'font-size':'11px', 'width':'70%', 'margin':'auto'})

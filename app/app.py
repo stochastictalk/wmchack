@@ -134,8 +134,14 @@ e_corpus_statistics = [
      but are not common to all files in the corpus.
     '''
     ),
+    dhtml.Div(['Keyword: ',
+              dcc.Input(id='input-keyword', value='analyst', type='text')],
+              style={'width':'40%', 'display':'inline-block'}),
+    dhtml.Div(id='output-keyword-confirm',
+              style={'width':'60%', 'display':'inline-block'}),
 
-    viz.get_table_of_similar_words(data, keyword='python'),
+    dhtml.Div(id='output-keyword-table',
+              style={'width':'100%', 'margin':'auto'}),
 ]
 
 app.layout = dhtml.Div([
@@ -151,6 +157,22 @@ style={'width': '60%', 'margin':'auto'}
 
 # define callbacks
 
+# keyword search
+@app.callback(
+    [Output(component_id='output-keyword-confirm', component_property='children'),
+     Output(component_id='output-keyword-table', component_property='children')],
+    [Input(component_id='input-keyword', component_property='value')]
+)
+def update_table_of_similar_words(keyword):
+    output_keyword_confirm = 'Showing results for token \'{}\''.format(
+                                                                       keyword)
+    try:
+        output_keyword_table = viz.get_table_of_similar_words(data, keyword)
+    except KeyError:
+        output_keyword_table = ('The token \'{}\' does not appear in the'
+                                ' corpus.').format(keyword)
+    
+    return (output_keyword_confirm, output_keyword_table)
 
 
 if __name__ == '__main__':
