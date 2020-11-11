@@ -15,9 +15,13 @@ import numpy as np
 import sparse
 from tqdm import tqdm
 import pickle
+from itertools import product
 
 STOPWORDS_SET = set(stopwords.words('english'))
 PUNCTUATION_SET = set(v for v in string.punctuation)
+PUNCTUATION_SET = PUNCTUATION_SET.union(set(['’', '‘', '•']))
+PUNCTUATION_SET = set(''.join(tup) for k in [1,2,3] 
+                  for tup in product(PUNCTUATION_SET, repeat=k))
 STOPWORDS_PUNCTUATION_SET = PUNCTUATION_SET.union(STOPWORDS_SET)
 
 
@@ -99,9 +103,9 @@ def read_corpus(corpus_id: str):
                 r'.*\.txt', # fileid pattern,
                 cat_pattern=r'.*___(.+)\.txt',
                 encoding='utf8')
-    corpus_dct = {fileid: list(reader.words(fileids=[fileid])) 
+    corpus_raw = {fileid: list(reader.words(fileids=[fileid])) 
                   for fileid in reader.fileids()}
-    return corpus_dct
+    return corpus_raw
 
 
 def n_fileids(corpus_raw: dict):

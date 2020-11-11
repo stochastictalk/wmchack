@@ -10,13 +10,15 @@ from dash.dependencies import Input, Output
 import dash_table as dtable
 import analysis as an
 import viz as viz
+import json
 
 # Load data
 data = an.load_viz_data()
-data['n_unique_words'] = len(set.union(
-                            *[set(txt) for txt in data['corpus_raw'].values()]
-                        ))
-data['example_fileid'] = list(data['corpus_raw'].keys())[777]
+data['n_unique_words'] = viz.get_n_unique_words(data)
+data['example_fileid'] = viz.get_example_fileid(data)
+data['example_source_text'] = viz.get_example_source_text()
+data['example_raw_tokens'] = viz.get_example_raw_tokens(data)
+data['example_filtered_tokens'] = viz.get_example_filtered_tokens(data)
 
 # intialize app obj
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -30,13 +32,15 @@ _© 2020 Decision Analysis Services Ltd._
 ''')]
 
 corpus_id = 'Vacancy descriptions featured on NHS Jobs on 7th Nov 2020'
+source_url = 'https://www.jobs.nhs.uk/'
 offset = 15
 e_corpus_spec = [
     dcc.Markdown('''
     #### **Corpus Specification**
 
     **Data source:**  ''' + '&nbsp;'*(offset-12) 
-    + corpus_id
+    + '[' + corpus_id + ']'
+    + '(' + source_url + ')'
     + '''  
 
     **Files:** ''' + '&nbsp;'*offset
@@ -51,19 +55,48 @@ e_corpus_spec = [
     + '{:,}'.format(data['n_unique_words'])
     + '''  
 
-    **Sample file tokens from file ''' 
+    **Sample text from source**:  
+    > ```
+    '''
+    + data['example_source_text']
+    + '''```    
+
+    **Sample raw tokens from file ''' 
     + '`{}`'.format(data['example_fileid']) 
     + ''':**  
     > ```'''
-    + ', '.join((data['corpus_raw'])[data['example_fileid']])[1:-1]
-    + '''```
+    + data['example_raw_tokens']
+    + '''``` 
 
-    **Distribution of file lengths**:  ''' 
+    **Sample filtered tokens from file ''' 
+    + '`{}`'.format(data['example_fileid']) 
+    + ''':**  
+    > ```'''
+    + data['example_filtered_tokens']
+    + '''```  '''
     ),
 
+    dcc.Markdown('''
+    **Distribution of file lengths**:  ''' 
+    ),
     dcc.Graph(
-        id='file_lengths',
-        figure=viz.plot_cdf_of_file_lengths(data),
+        id='cdf_of_file_lengths',
+        figure=viz.get_fig_cdf_of_file_lengths(data),
+        style={
+            'width':'700px',
+            'height':'400px',
+            'display':'block',
+            'margin-left':'auto',
+            'margin-right':'auto'
+        }
+    ),
+
+    dcc.Markdown('''
+    **Distribution of token lengths**:  ''' 
+    ),
+    dcc.Graph(
+        id='pmf_of_token_lengths',
+        figure=viz.get_fig_pmf_of_token_lengths(data),
         style={
             'width':'700px',
             'height':'400px',
