@@ -140,8 +140,23 @@ e_corpus_statistics = [
     dhtml.Div(id='output-keyword-confirm',
               style={'width':'60%', 'display':'inline-block'}),
 
-    dhtml.Div(id='output-keyword-table',
-              style={'width':'100%', 'margin':'auto'}),
+    dhtml.Div(id='output-keyword-table'),
+
+    dcc.Markdown('''
+    **Latent dimension analysis**  
+
+    '''),
+    dcc.Graph(
+        id='dimensionality-reduction',
+        figure=viz.get_fig_scatter_of_pc_tfidf(data),
+        style={
+            'width':'700px',
+            'height':'400px',
+            'display':'block',
+            'margin-left':'auto',
+            'margin-right':'auto'
+        }
+    )
 ]
 
 app.layout = dhtml.Div([

@@ -11,6 +11,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import dash_html_components as dhtml
+from sklearn.decomposition import TruncatedSVD
+from sklearn.preprocessing import normalize
+import numpy as np
 
 import json
 import os
@@ -161,3 +164,34 @@ def __generate_table(dataframe, max_rows=10):
             for i in range(min(len(dataframe), max_rows))
         ])
     ], style={'font-size':'11px', 'width':'70%', 'margin':'auto'})
+
+
+def get_fig_scatter_of_pc_tfidf(data):
+    #Xin = np.random.uniform(size=data['s_tfidf'].shape)
+    # performs PCA with a subset (1000) of records 
+    #ix = np.random.choice(range(data['s_tfidf'].shape[0]), 1000, replace=False)
+    #Xin = data['s_tfidf'][ix, :].todense()
+    Xin = data['s_tfidf'].tocsr() # to scipy sparse CSR format
+    Xin = normalize(Xin)
+    svd = TruncatedSVD(n_components=2)
+    svd.fit(Xin)
+    Xout = svd.transform(Xin)
+
+    inv_fileid_index = {v: k for k, v in data['fileid_index'].items()}
+    fileids = [inv_fileid_index[j] for j in range(len(inv_fileid_index.keys()))]
+    df_display = pd.DataFrame({
+                        'Latent dimension 1': Xout[:, 0],
+                        'Latent dimension 2': Xout[:, 1],
+                        'File id': fileids
+                    })
+    fig = px.scatter(df_display, x='Latent dimension 1',
+                     y='Latent dimension 2', hover_name='File id',
+                     hover_data={
+                         'Latent dimension 1': False,
+                         'Latent dimension 2': False
+                     })
+    fig.update_layout(
+        showlegend=False,
+        margin=go.layout.Margin(l=20, r=20, b=20, t=20)
+    )
+    return fig
