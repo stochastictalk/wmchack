@@ -97,6 +97,8 @@ e_corpus_statistics = [
         }
     ),
 
+    dhtml.Br(),
+
     dcc.Markdown('''
     **Distribution of token lengths**  ''' 
     ),
@@ -111,6 +113,8 @@ e_corpus_statistics = [
             'margin-right':'auto'
         }
     ),
+
+    dhtml.Br(),
 
     dcc.Markdown('''
     **Most common tokens**  ''' 
@@ -127,6 +131,8 @@ e_corpus_statistics = [
         }
     ),
 
+    dhtml.Br(),
+
     dcc.Markdown('''
     **Co-featured word search**
     
@@ -142,20 +148,33 @@ e_corpus_statistics = [
 
     dhtml.Div(id='output-keyword-table'),
 
-    dcc.Markdown('''
-    **Latent dimension analysis**  
+    dhtml.Br(),
 
-    '''),
-    dcc.Graph(
-        id='dimensionality-reduction',
-        figure=viz.get_fig_scatter_of_pc_tfidf(data),
-        style={
-            'width':'700px',
-            'height':'400px',
-            'display':'block',
-            'margin-left':'auto',
-            'margin-right':'auto'
-        }
+    dcc.Markdown('''
+        **Latent dimension analysis**  
+
+        '''),
+    dhtml.Div([
+        dcc.Graph(
+            id='dimensionality-reduction',
+            figure=viz.get_fig_scatter_of_pc_tfidf(data),
+            style={
+                'width':'350px',
+                'height':'350px',
+                'display':'block-inline',
+                'margin-left':'auto',
+                'margin-right':'auto',
+                'vertical-align':'top'
+            }
+        )],
+    style={'width':'50%', 'display':'inline-block', 'vertical-align':'top'}
+    ),
+    dhtml.Div([
+        dcc.Markdown(id='output-filtered-tokens',
+                     children=viz.get_filtered_file_tokens(data, 
+                         '915892388___Senior Staff Nurse.txt'))
+        ],
+    style={'width':'50%', 'display':'inline-block', 'vertical-align':'top'}
     )
 ]
 
@@ -189,6 +208,21 @@ def update_table_of_similar_words(keyword):
     
     return (output_keyword_confirm, output_keyword_table)
 
+# display text on click
+@app.callback(
+    Output('output-filtered-tokens', 'children'),
+    [Input('dimensionality-reduction', 'clickData')])
+def update_file_displayed(clickData):
+    try:
+        fileid = clickData['points'][0]['hovertext']
+        return (
+            'File id  \n`\'{}\'`  \n\n'.format(fileid) 
+            + 'Tokens in file  \n `{}`  \n\n'.format(viz.get_file_length(data, fileid))
+            + 'Distinguishing tokens  \n'
+            + '`' + viz.get_file_top_tfidf(data, fileid) + '`'
+            )
+    except TypeError:
+        return '> `Click a marker to display file text and statistics`'
 
 if __name__ == '__main__':
 	app.run_server(debug=True)

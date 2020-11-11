@@ -167,10 +167,6 @@ def __generate_table(dataframe, max_rows=10):
 
 
 def get_fig_scatter_of_pc_tfidf(data):
-    #Xin = np.random.uniform(size=data['s_tfidf'].shape)
-    # performs PCA with a subset (1000) of records 
-    #ix = np.random.choice(range(data['s_tfidf'].shape[0]), 1000, replace=False)
-    #Xin = data['s_tfidf'][ix, :].todense()
     Xin = data['s_tfidf'].tocsr() # to scipy sparse CSR format
     Xin = normalize(Xin)
     svd = TruncatedSVD(n_components=2)
@@ -189,9 +185,24 @@ def get_fig_scatter_of_pc_tfidf(data):
                      hover_data={
                          'Latent dimension 1': False,
                          'Latent dimension 2': False
-                     })
+                     }
+                     )
     fig.update_layout(
         showlegend=False,
-        margin=go.layout.Margin(l=20, r=20, b=20, t=20)
+        margin=go.layout.Margin(l=20, r=20, b=20, t=20),
+        clickmode='event'
     )
     return fig
+
+def get_filtered_file_tokens(data, fileid):
+    return ', '.join(data['corpus_words'][fileid])
+
+def get_file_top_tfidf(data, fileid):
+    i = data['fileid_index'][fileid]
+    ser_tfidf = pd.Series(data['s_tfidf'][i, :].todense(), 
+                          index=sorted(data['token_index'].keys(),
+                                       key=lambda k: data['token_index'][k]))
+    return ', '.join(ser_tfidf.nlargest(20).index)
+
+def get_file_length(data, fileid):
+    return len(data['corpus_words'][fileid])
