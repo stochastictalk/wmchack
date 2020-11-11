@@ -10,6 +10,8 @@ import analysis as an
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import dash_html_components as dhtml
+
 import json
 import os
 
@@ -125,3 +127,23 @@ def get_fig_most_common_tokens(data, N=100):
     )
 
     return fig
+
+def get_table_of_similar_words(data, keyword, N=10):
+    #df = pd.DataFrame({'a':[0, 1, 2], 'b':[4, 5, 6]})
+    df_similar = an.similar_words(keyword, data['token_index'],
+                                  data['s_tfidf'], N=N)
+    return __generate_table(df_similar, max_rows=N)
+
+def __generate_table(dataframe, max_rows=10):
+    ''' From https://dash.plotly.com/layout
+    '''
+    return dhtml.Table([
+        dhtml.Thead(
+            dhtml.Tr([dhtml.Th(col) for col in dataframe.columns])
+        ),
+        dhtml.Tbody([
+            dhtml.Tr([
+                dhtml.Td(dataframe.iloc[i][col]) for col in dataframe.columns
+            ]) for i in range(min(len(dataframe), max_rows))
+        ])
+    ])

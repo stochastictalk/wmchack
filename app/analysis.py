@@ -250,14 +250,17 @@ def similar_words(query_word: str, token_index: dict,
         mean_tfidf = s_tfidf[fileid_ix, :].mean(axis=0).todense() # for each token
 
         # cast numpy array to labelled series, so we known what the tokens are
-        ser_mean_tfidf = pd.Series(
-                            data=mean_tfidf, 
-                            index=sorted(token_index.keys(),
-                                         key=lambda k: token_index[k])
-                        )
+        df = pd.DataFrame(
+                         data=mean_tfidf, 
+                         index=sorted(token_index.keys(),
+                                      key=lambda k: token_index[k]),
+                         columns=['Mean tf-idf']
+        )
+        df.index = df.index.rename('Token')
+        df = df.reset_index(drop=False)
         
         # return top n words with highest mean tf-idf
-        return ser_mean_tfidf.nlargest(n=N)
+        return df.nlargest(n=N, columns='Mean tf-idf')
         
 
 def jacard_index(s_tf: sparse.COO, fileid: str, fileid_index: dict):

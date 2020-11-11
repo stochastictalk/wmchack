@@ -125,7 +125,17 @@ e_corpus_statistics = [
             'margin-left':'auto',
             'margin-right':'auto'
         }
-    )
+    ),
+
+    dcc.Markdown('''
+    **Co-featured word search**
+    
+    Enter a keyword to find words that commonly occur in the same file,
+     but are not common to all files in the corpus.
+    '''
+    ),
+
+    viz.get_table_of_similar_words(data, keyword='python'),
 ]
 
 app.layout = dhtml.Div([
