@@ -46,12 +46,12 @@ def get_fig_cdf_of_file_lengths(data):
         secondary_y=False,
     )
     fig.add_trace(
-        go.Scatter(x=x, y=P_x, mode='lines', name='Fraction of corpus'),
+        go.Scatter(x=x, y=100*P_x, mode='lines', name='% of corpus files'),
         secondary_y=True
     )
     fig.update_xaxes(title_text='Words in file')
     fig.update_yaxes(title_text='Files with this many words or fewer', secondary_y=False)
-    fig.update_yaxes(title_text='Fraction of corpus', secondary_y=True)
+    fig.update_yaxes(title_text='Cumulative % of corpus files', secondary_y=True)
     fig.update_layout(
         showlegend=False,
         margin=go.layout.Margin(l=20, r=20, b=20, t=20)
@@ -76,13 +76,49 @@ def get_fig_pmf_of_token_lengths(data):
     )
     fig.add_trace(
         go.Bar(x=ser_freq_dist.index, 
-               y=ser_freq_dist.values/ser_freq_dist.values.sum(),
+               y=100*ser_freq_dist.values/ser_freq_dist.values.sum(),
                name=''),
         secondary_y=True
     )
     fig.update_xaxes(title_text='Number of characters in token')
     fig.update_yaxes(title_text='Number of tokens')
-    fig.update_yaxes(title_text='Fraction of tokens', secondary_y=True)
+    fig.update_yaxes(title_text='% of corpus tokens', secondary_y=True)
+    fig.update_layout(
+        showlegend=False,
+        margin=go.layout.Margin(l=20, r=20, b=20, t=20)
+    )
+
+    return fig
+
+def get_fig_most_common_tokens(data, N=100):
+    ''' Returns plot showing how many corpus tokens are of top N tokens.
+    '''
+    # get list of all tokens in filtered corpus
+    tokens = [t for fileid in data['corpus_words'].keys()
+              for t in data['corpus_words'][fileid]]
+
+    # get token counts (as a proportion)
+    ser_token_c = pd.Series(tokens).value_counts() # c for count
+    n_words_in_corpus = ser_token_c.values.sum()
+
+    # get cumulative fraction of corpus
+    ser_token_p = ser_token_c.nlargest(N)/n_words_in_corpus
+    ser_token_F = 100*ser_token_p.cumsum()
+
+    # format index to include rank
+    ser_token_F.index = [t + ' (' + str(j+1) + ')' for j, t in 
+                         enumerate(ser_token_F.index)]
+    ser_token_F = ser_token_F.sort_values(ascending=False)
+
+    # plot it 
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(x=ser_token_F.values, 
+               y=ser_token_F.index,
+               orientation='h')
+    )
+    fig.update_xaxes(title_text='Cumulative % of corpus tokens')
+    fig.update_yaxes(title_text='Token')
     fig.update_layout(
         showlegend=False,
         margin=go.layout.Margin(l=20, r=20, b=20, t=20)
