@@ -19,7 +19,8 @@ from itertools import product
 
 STOPWORDS_SET = set(stopwords.words('english'))
 PUNCTUATION_SET = set(v for v in string.punctuation)
-PUNCTUATION_SET = PUNCTUATION_SET.union(set(['’', '‘', '•', '–']))
+PUNCTUATION_SET = PUNCTUATION_SET.union(set(['’', '‘', '•', '–', '”',
+                                             '“']))
 PUNCTUATION_SET = set(''.join(tup) for k in [1,2,3] 
                   for tup in product(PUNCTUATION_SET, repeat=k))
 STOPWORDS_PUNCTUATION_SET = PUNCTUATION_SET.union(STOPWORDS_SET)
@@ -154,7 +155,6 @@ def get_corpus_words(corpus_raw: dict):
         for fileid, filetxt in corpus_raw.items()
     }
     return corpus_words
-
 
 def get_corpus_types(corpus_words: dict):
     ''' Returns unique tokens in each file of corpus.
@@ -297,43 +297,7 @@ def jacard_index(s_tf: sparse.COO, fileid: str, fileid_index: dict):
     
     return ser_ji.sort_values(ascending=False)
 
-def load_viz_data():
-    ''' Loads dictionary containing data for visualizations.
-
-        Reads dictionary elements from .pkl files in ./pkl/
-
-        If these .pkl files do not exist, the elements are computed from
-        scratch.
+def get_sorted_index(index: dict):
+    ''' Returns index keys sorted by value
     '''
-    corpus_id = 'uk'
-    data_vars = ['corpus_raw', 'n_files', 'n_words',
-                'corpus_types', 'corpus_words',
-                'token_index', 'fileid_index',
-                's_termfreq', 's_tfidf']
-    pkl_fp_dct = {k: os.path.join('.', 'pkl', k + '.pkl') for k in data_vars}
-    data = {}
-
-    # load pickled objs if they exist
-    if os.path.exists(os.path.join('.', 'pkl', 'corpus_raw.pkl')):
-        for k in pkl_fp_dct.keys():
-            with open(pkl_fp_dct[k], 'rb') as f:
-                data[k] = pickle.load(f)
-    
-    # otherwise create and pickle them
-    else: 
-        data['corpus_raw'] = read_corpus('uk')
-        data['n_files'] = n_fileids(data['corpus_raw'])
-        data['n_words'] = n_words(data['corpus_raw'])
-        data['corpus_words'] = get_corpus_words(data['corpus_raw'])
-        data['corpus_types'] = get_corpus_types(data['corpus_words'])
-        data['token_index'] = get_token_index(data['corpus_types'])
-        data['fileid_index'] = get_fileid_index(data['corpus_types'])
-        data['s_termfreq'], data['s_tfidf'] = tf_idf(data['corpus_types'],
-                                                     data['corpus_words'],
-                                                     data['fileid_index'],
-                                                     data['token_index'])
-        for k in data.keys():
-            with open(pkl_fp_dct[k], 'wb') as f:#
-                pickle.dump(data[k], f)
-        
-    return data
+    return sorted(index.keys(), key=lambda k: index[k])
