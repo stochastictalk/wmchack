@@ -1,7 +1,3 @@
-## TODO:
-#   Rewrite web scraper so that it is reliable
-
-
 # -*- utf-8 -*-
 import dash
 import dash_core_components as dcc
@@ -22,6 +18,25 @@ data = viz.load_data()
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
+# tab style
+tab_style = {
+    'borderBottom': '1px solid #d6d6d6',
+    'padding': '6px',
+    'fontWeight': 'bold'
+}
+
+tab_selected_style = {
+    'borderTop': '1px solid #d6d6d6',
+    'borderBottom': '1px solid #d6d6d6',
+    'backgroundColor': '#CC1F1F',
+    'color': 'white',
+    'padding': '6px'
+}
+
+main_tab_selected_style = {
+    'borderTop': '1px solid #CC1F1F',
+}
+
 # include visualizations
 e_header = [dcc.Markdown('''
 _© 2020 Decision Analysis Services Ltd._
@@ -31,81 +46,41 @@ _© 2020 Decision Analysis Services Ltd._
 
 corpus_id = 'Vacancy descriptions featured on NHS Jobs on 7th Nov 2020'
 source_url = 'https://www.jobs.nhs.uk/'
-offset = 15
-
-e_contents = [
-    dcc.Markdown('## **Contents**  ', id='sec-contents'),
-    dhtml.A('Corpus Specification', href='#sec-corpus-spec'),
-    dhtml.Br(),
-    dhtml.A('Preprocessing Summary', href='#sec-preprocessing-summary'),
-    dhtml.Br(),
-    dhtml.A('Corpus Statistics', href='#sec-corpus-statistics')
-]
+offset = 20
 
 e_corpus_spec = [
     dcc.Markdown('''
     ## **Corpus Specification**
 
-    **Data source:**  ''' + '&nbsp;'*(offset-12) 
+    ##### Data source:  ''' + '&nbsp;'*(offset-12) 
     + '[' + corpus_id + ']'
     + '(' + source_url + ')'
     + '''  
 
-    **Files:** ''' + '&nbsp;'*offset
+    ##### Files: ''' + '&nbsp;'*offset
     + '{:,}'.format(data['n_files'])
     + '''  
 
-    **Words:** ''' + '&nbsp;'*(offset-2) 
+    ##### Words: ''' + '&nbsp;'*(offset-2) 
     + '{:,}'.format(data['n_words'])
     + '''  
 
-    **Unique words:** ''' + '&nbsp;'*(offset - 14)
+    ##### Unique words: ''' + '&nbsp;'*(offset - 15)
     + '{:,}'.format(data['n_unique_words']),
     id='sec-corpus-specification'
     ),
-]
 
-e_corpus_preprocessing = [
-    dcc.Markdown('''
-    ## **Preprocessing summary**  
-
-    #### **Sample text from source**  
-    > ```
-    '''
-    + data['example_source_text']
-    + '''```    
-
-    #### **Sample raw tokens from file ''' 
-    + '`{}`'.format(data['example_fileid']) 
-    + '''**  
-    > ```'''
-    + data['example_raw_tokens']
-    + '''``` 
-
-    #### **Sample filtered tokens from file ''' 
-    + '`{}`'.format(data['example_fileid']) 
-    + '''**  
-    > ```'''
-    + data['example_filtered_tokens']
-    + '''```  ''',
-    id='sec-preprocessing-summary')
-]
-
-e_corpus_statistics = [
-    dcc.Markdown('''
-    ## **Corpus Statistics**  
-    ''',
-    id='sec-corpus-statistics'),
-
+    dhtml.Br(),
+    
     dhtml.Div([
         dcc.Markdown('''
-        #### Distribution of file lengths  ''' 
+        ##### Distribution of file lengths  ''' 
         ),
         dcc.Graph(
             id='graph-filelengthcdf',
             figure=viz.get_fig_cdf_of_file_lengths(data),
             style={
-                'width':'350px',
+                'width':'450px',
                 'height':'350px',
                 'display':'block',
                 'margin-left':'auto',
@@ -117,13 +92,13 @@ e_corpus_statistics = [
 
     dhtml.Div([
         dcc.Markdown('''
-        #### Distribution of token lengths  ''' 
+        ##### Distribution of token lengths  ''' 
         ),
         dcc.Graph(
             id='graph-tokenlengthpmf',
             figure=viz.get_fig_pmf_of_token_lengths(data),
             style={
-                'width':'350px',
+                'width':'450px',
                 'height':'350px',
                 'display':'block',
                 'margin-left':'auto',
@@ -134,9 +109,10 @@ e_corpus_statistics = [
     ),
 
     dhtml.Br(),
+    dhtml.Br(),
 
     dcc.Markdown('''
-    #### 100 most common tokens  ''' 
+    ##### 100 most common tokens  ''' 
     ),
     dcc.Graph(
         id='graph-toptokens',
@@ -150,13 +126,61 @@ e_corpus_statistics = [
         }
     ),
 
-    dhtml.Br(),
+]
 
+e_corpus_preprocessing = [
     dcc.Markdown('''
-    #### What other words appear in files that contain `keyword`?
+    ## **Preprocessing summary**  
+    '''
+    ),
+    
+    dcc.Markdown('##### Sample text from source'),
+    dhtml.Div([
+        dcc.Markdown('''  
+        > ```'''
+        + data['example_source_text']
+        + '''```  '''
+        )
+    ], style={'height':'300px', 'width':'100%',
+              'overflow-y':'scroll',
+              'word-wrap':'break-word'}
+    ),
+    dhtml.Br(),
+    dcc.Markdown('''
+        ##### Sample raw tokens from file ''' 
+        + '`{}`'.format(data['example_fileid'])
+    ),
+    dhtml.Div([
+        dcc.Markdown('''  
+        > ```'''
+        + data['example_raw_tokens']
+        + '''```'''
+        )
+    ], style={'height':'300px', 'overflow':'auto'}
+    ),
+    dhtml.Br(),
+    dcc.Markdown('''
+        ##### Sample filtered tokens from file ''' 
+        + '`{}`'.format(data['example_fileid'])
+    ),
+    dhtml.Div([
+        dcc.Markdown('''  
+        > ```'''
+        + data['example_filtered_tokens']
+        + '''```  '''
+        )
+    ], style={'height':'300px', 'overflow':'auto'}
+    )
+]
+
+
+e_div_wordsearch = [
+    dhtml.Br(), 
+    dcc.Markdown('''
+    ##### What other words appear in files that contain `keyword`?
     
     Enter a keyword to find words that commonly occur in the same file,
-     but are not common to all files in the corpus.
+     but that are not common to all files in the corpus.
     '''
     ),
     dhtml.Div(['Keyword: ',
@@ -165,12 +189,17 @@ e_corpus_statistics = [
     dhtml.Div(id='div-wordsearch-confirm',
               style={'width':'60%', 'display':'inline-block'}),
 
-    dhtml.Div(id='div-wordsearch-table'),
-
+    dhtml.Br(),
     dhtml.Br(),
 
+    dhtml.Div(id='div-wordsearch-table')
+]
+
+
+e_graph_pca = [
+    dhtml.Br(), 
     dcc.Markdown('''
-        #### Are there clusters of files containing similar words?  
+        ##### Are there clusters of files containing similar words?  
 
         '''),
     dhtml.Div([
@@ -178,7 +207,7 @@ e_corpus_statistics = [
             id='graph-pca',
             figure=viz.get_fig_scatter_of_pc_tfidf(data),
             style={
-                'width':'350px',
+                'width':'450px',
                 'height':'350px',
                 'display':'block-inline',
                 'margin-left':'auto',
@@ -194,11 +223,14 @@ e_corpus_statistics = [
     style={'width':'50%', 'display':'inline-block', 'vertical-align':'top'}
     ),
 
+    dhtml.Br()
+]
+
+
+e_graph_jacardindex = [
     dhtml.Br(),
-
-
     dcc.Markdown('''
-        #### Which files are similar to `file1` and `file2`?  
+        ##### Which files share words with `file1` and `file2`?  
 
         '''),
     dhtml.Div([
@@ -225,21 +257,47 @@ e_corpus_statistics = [
     )
 ]
 
+e_corpus_statistics = [
+    dcc.Markdown('''
+    ## **Corpus Statistics**  
+    ''',
+    id='sec-corpus-statistics'),
+    dhtml.Div([
+        dcc.Tabs([
+            dcc.Tab(label='Jacard index scatter plot',
+                    children=e_graph_jacardindex,
+                    style=tab_style,
+                    selected_style=tab_selected_style),
+            dcc.Tab(label='Word similarity search',
+                    children=e_div_wordsearch,
+                    style=tab_style,
+                    selected_style=tab_selected_style),
+            dcc.Tab(label='Document cluster analysis',
+                    children=e_graph_pca,
+                    style=tab_style,
+                    selected_style=tab_selected_style)
+        ],
+        style={'width':'95%'})],
+    style={'height':'700px'})
+]
+
 app.layout = dhtml.Div([
     *e_header,
     dhtml.Hr(),
-    *e_contents,
-    dhtml.Hr(),
-    *e_corpus_spec,
-    dhtml.A('return to contents', href='#sec-contents'),
-    dhtml.Hr(),
-    *e_corpus_preprocessing,
-    dhtml.A('return to contents', href='#sec-contents'),
-    dhtml.Hr(),
-    *e_corpus_statistics,
-    dhtml.A('return to contents', href='#sec-contents'),
-    dhtml.Br(),
-    dhtml.Br()
+    dcc.Tabs([
+        dcc.Tab(label='Corpus Specification', 
+                children=e_corpus_spec,
+                selected_style=main_tab_selected_style
+        ),
+        dcc.Tab(label='Preprocessing',
+                children=e_corpus_preprocessing,
+                selected_style=main_tab_selected_style
+        ),
+        dcc.Tab(label='Corpus Statistics',
+                children=e_corpus_statistics,
+                selected_style=main_tab_selected_style
+        )
+    ])
 ], 
 style={'width': '60%', 'margin':'auto'}
 )
