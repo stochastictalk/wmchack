@@ -231,19 +231,17 @@ def get_fig_scatter_of_pc_tfidf(data):
     df_display = pd.DataFrame({
                         'Latent dimension 1': Xout[:, 0],
                         'Latent dimension 2': Xout[:, 1],
-                        'File id': data['sorted_fileids'],
-                        'File length': an.file_lengths(data['corpus_raw'])
+                        'File id': data['sorted_fileids']
                     })
     fig = px.scatter(df_display, x='Latent dimension 1',
                      y='Latent dimension 2', hover_name='File id',
-                     color='File length',
                      hover_data={
                          'Latent dimension 1': False,
-                         'Latent dimension 2': False,
-                         'File length':False
+                         'Latent dimension 2': False
                      })
     fig.update_traces(marker=dict(size=5,
-                        line=dict(width=1, color='white')),
+                      line=dict(width=1,
+                                color='white')),
                       selector=dict(mode='markers'))
     fig.update_layout(
         showlegend=False,
@@ -293,7 +291,7 @@ def get_fig_jacard_index_scatterplot(data):
                          'File 2 JI': False
                      })
 
-    fig.update_traces(marker=dict(size=5, opacity=0.5,
+    fig.update_traces(marker=dict(size=5,
                                   line=dict(width=1,
                                             color='white')),
                       selector=dict(mode='markers'))
