@@ -1,4 +1,5 @@
-# -*- utf-8 -*-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 # Created: 4th November 2020
 # Authors: Jerome Wynne (jeromewynne@das-ltd.co.uk)
