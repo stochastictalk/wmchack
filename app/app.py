@@ -6,18 +6,25 @@ import dash_html_components as dhtml
 from dash.dependencies import Input, Output
 import dash_table as dtable
 import analysis as an
-import viz as viz
-import json
+import viz
 import plotly.io as pio
+import pickle
 
 pio.templates.default = 'seaborn'
-
-# Load data
-data = viz.load_data()
 
 # intialize app obj
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+
+# Load backend
+corpus_id = 'uk'
+try:
+    with open(corpus_id+'.pkl', 'rb') as f:
+        be = pickle.load(f)
+except FileNotFoundError:
+    be = viz.Backend(corpus_id)
+    with open(corpus_id+'.pkl', 'wb') as f:
+        pickle.dump(be, f)
 
 # tab style
 tab_style = {
@@ -54,20 +61,20 @@ e_corpus_spec = [
     ## **Corpus Specification**
 
     ##### Data source:  ''' + '&nbsp;'*(offset-12) 
-    + '[' + corpus_id + ']'
+    + '[' + be.data.corpus_id + ']'
     + '(' + source_url + ')'
     + '''  
 
     ##### Files: ''' + '&nbsp;'*offset
-    + '{:,}'.format(data['n_files'])
+    + '{:,}'.format(be.data.n_files)
     + '''  
 
     ##### Words: ''' + '&nbsp;'*(offset-2) 
-    + '{:,}'.format(data['n_words'])
+    + '{:,}'.format(be.data.n_words)
     + '''  
 
     ##### Unique words: ''' + '&nbsp;'*(offset - 15)
-    + '{:,}'.format(data['n_unique_words']),
+    + be.viz.md.n_unique_tokens_in_raw(be.data),
     id='sec-corpus-specification'
     ),
 
@@ -79,7 +86,7 @@ e_corpus_spec = [
         ),
         dcc.Graph(
             id='graph-filelengthcdf',
-            figure=viz.get_fig_cdf_of_file_lengths(data),
+            figure=be.viz.graph.line_cdf_n_tokens_in_corpus_raw(be.data),
             style={
                 'width':'450px',
                 'height':'350px',
@@ -97,7 +104,7 @@ e_corpus_spec = [
         ),
         dcc.Graph(
             id='graph-tokenlengthpmf',
-            figure=viz.get_fig_pmf_of_token_lengths(data),
+            figure=be.viz.graph.bar_pmf_token_lengths(be.data),
             style={
                 'width':'450px',
                 'height':'350px',
@@ -117,7 +124,7 @@ e_corpus_spec = [
     ),
     dcc.Graph(
         id='graph-toptokens',
-        figure=viz.get_fig_most_common_tokens(data),
+        figure=be.viz.graph.bar_cdf_most_common_tokens(be.data),
         style={
             'width':'700px',
             'height':'400px',
@@ -139,7 +146,7 @@ e_corpus_preprocessing = [
     dhtml.Div([
         dcc.Markdown('''  
         > ```'''
-        + data['example_source_text']
+        + be.viz.md.source_text(be.data, be.data.example_fileid)
         + '''```  '''
         )
     ], style={'height':'300px', 'width':'100%',
@@ -149,12 +156,12 @@ e_corpus_preprocessing = [
     dhtml.Br(),
     dcc.Markdown('''
         ##### Sample raw tokens from file ''' 
-        + '`{}`'.format(data['example_fileid'])
+        + '`{}`'.format(be.data.example_fileid)
     ),
     dhtml.Div([
         dcc.Markdown('''  
         > ```'''
-        + data['example_raw_tokens']
+        + be.viz.md.raw_tokens_in_file(be.data, be.data.example_fileid)
         + '''```'''
         )
     ], style={'height':'300px', 'overflow':'auto'}
@@ -162,12 +169,12 @@ e_corpus_preprocessing = [
     dhtml.Br(),
     dcc.Markdown('''
         ##### Sample filtered tokens from file ''' 
-        + '`{}`'.format(data['example_fileid'])
+        + '`{}`'.format(be.data.example_fileid)
     ),
     dhtml.Div([
         dcc.Markdown('''  
         > ```'''
-        + data['example_filtered_tokens']
+        + be.viz.md.filtered_tokens_in_file(be.data, be.data.example_fileid)
         + '''```  '''
         )
     ], style={'height':'300px', 'overflow':'auto'}
@@ -206,7 +213,7 @@ e_graph_pca = [
     dhtml.Div([
         dcc.Graph(
             id='graph-pca',
-            figure=viz.get_fig_scatter_of_pc_tfidf(data),
+            figure=be.viz.graph.scatter_pc_tfidf(be.data),
             style={
                 'width':'450px',
                 'height':'350px',
@@ -236,8 +243,8 @@ e_graph_jacardindex = [
         '''),
     dhtml.Div([
         dcc.Markdown(id='markdown-jacardindex',
-                     children=viz.get_filtered_file_tokens(data, 
-                         '915892388___Senior Staff Nurse.txt'))
+                     children=be.viz.md.filtered_tokens_in_file(be.data,
+                                be.data.example_fileid))
         ],
     style={'height':'350px', 'width':'50%', 'overflow':'auto',
            'display':'inline-block', 'vertical-align':'top'}
@@ -245,7 +252,7 @@ e_graph_jacardindex = [
     dhtml.Div([
         dcc.Graph(
             id='graph-jacardindex',
-            figure=viz.get_fig_jacard_index_scatterplot(data),
+            figure=be.viz.graph.scatter_jacard(be.data),
             style={
                 'width':'350px',
                 'height':'350px',
@@ -313,10 +320,9 @@ style={'width': '60%', 'margin':'auto'}
     [Input(component_id='input-wordsearch', component_property='value')]
 )
 def update_table_of_similar_words(keyword):
-    output_keyword_confirm = 'Showing results for token \'{}\''.format(
-                                                                       keyword)
+    output_keyword_confirm = 'Showing results for token \'{}\''.format(keyword)
     try:
-        output_keyword_table = viz.get_table_of_similar_words(data, keyword)
+        output_keyword_table = be.viz.table.similar_words(be.data, keyword)
     except KeyError:
         output_keyword_table = ('The token \'{}\' does not appear in the'
                                 ' corpus.').format(keyword)
@@ -333,9 +339,10 @@ def update_file_displayed_pca(clickData):
         fileid = clickData['points'][0]['hovertext']
         return (
             'File id  \n`\'{}\'`  \n\n'.format(fileid) 
-            + 'Tokens in file  \n `{}`  \n\n'.format(viz.get_file_length(data, fileid))
+            + 'Tokens in file  \n `{}`  \n\n'.format(
+                    be.viz.md.n_tokens_in_file(be.data, fileid))
             + 'Distinguishing tokens  \n'
-            + '`' + viz.get_file_top_tfidf(data, fileid) + '`'
+            + '`' + be.viz.md.top_tfidf(be.data, fileid) + '`'
             )
     except TypeError:
         return '> `Click a marker to display file statistics`'
@@ -349,7 +356,8 @@ def update_file_displayed_jacardindex(clickData):
     try:
         fileid = clickData['points'][0]['hovertext']
         return ('Tokens in file `\'' + fileid + '\'`  \n' 
-                + '> `' + viz.get_filtered_file_tokens(data, fileid) + '`')
+                + '> `' + be.viz.md.filtered_tokens_in_file(be.data,
+                                                            fileid) + '`')
     except TypeError:
         return '> `Click a marker to display file contents`'
 
