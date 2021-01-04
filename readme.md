@@ -12,4 +12,3 @@ conda env create --file requirements.txt
 
 ---
 
-![Screenshot of web app](/data/img/readme.png)
