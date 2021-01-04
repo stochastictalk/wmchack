@@ -20,7 +20,7 @@ import pickle
 from itertools import product
 
 STOPWORDS_SET = set(stopwords.words('english'))
-PUNCTUATION_SET = set(v for v in string.punctuation)
+PUNCTUATION_SET = set(v for v in string.punctuation if v != "-")
 PUNCTUATION_SET = PUNCTUATION_SET.union(set(['’', '‘', '•', '–', '”',
                                              '“']))
 PROD_PUNCTUATION_SET = set(''.join(tup) for k in [1,2,3] 
@@ -102,9 +102,9 @@ def read_corpus(corpus_id: str):
 def clean(file_string: str):
     ''' Cleans a string.
     '''
-    file_string = html.unescape(file_string)
+    file_string = html.unescape(file_string) # replace html entitities with unicode chars
     file_string = re.sub(pattern='<\/?[^>]*>',
-                         repl='',
+                         repl=' ', # replace html tags with spaces
                          string=file_string)
     file_string = re.sub(pattern=r'\n',
                          repl=' ',

@@ -47,12 +47,12 @@ main_tab_selected_style = {
 
 # include visualizations
 e_header = [dcc.Markdown('''
-_© 2020 Decision Analysis Services Ltd._
+_2020 Decision Analysis Services Ltd._
 
 # **Text Mining Web Application**
 ''')]
 
-corpus_id = 'Vacancy descriptions featured on NHS Jobs on 7th Nov 2020'
+corpus_descr = 'Vacancy descriptions featured on NHS Jobs on 7th Nov 2020'
 source_url = 'https://www.jobs.nhs.uk/'
 offset = 20
 
@@ -61,7 +61,7 @@ e_corpus_spec = [
     ## **Corpus Specification**
 
     ##### Data source:  ''' + '&nbsp;'*(offset-12) 
-    + '[' + be.data.corpus_id + ']'
+    + '[' + corpus_descr + ']'
     + '(' + source_url + ')'
     + '''  
 
